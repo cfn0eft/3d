@@ -93,6 +93,9 @@ class PoseLabApp:
         self._fps = 0.0
         self._last_frame_time: Optional[float] = None
         self._source_info: dict = {}
+        self._last_ts_ms = 0.0
+        self._scenes: List[tuple] = []  # (label, start_ms, end_ms)
+        self._scene_start: Optional[tuple] = None  # (label, start_ms)
 
         self._settings = load_settings()
         self._apply_theme()
@@ -205,15 +208,18 @@ class PoseLabApp:
         tab_rec = ttk.Frame(notebook, padding=8)
         tab_batch = ttk.Frame(notebook, padding=8)
         tab_angle = ttk.Frame(notebook, padding=8)
+        tab_scene = ttk.Frame(notebook, padding=8)
         notebook.add(tab_main, text=" 設定 ")
         notebook.add(tab_rec, text=" 記録・保存 ")
         notebook.add(tab_batch, text=" 一括処理 ")
         notebook.add(tab_angle, text=" 関節角度 ")
+        notebook.add(tab_scene, text=" シーンタグ ")
 
         self._build_tab_main(tab_main)
         self._build_tab_record(tab_rec)
         self._build_tab_batch(tab_batch)
         self._build_tab_angle(tab_angle)
+        self._build_tab_scene(tab_scene)
 
         # ステータスバー
         status_row = ttk.Frame(self.root, style="Panel.TFrame")
@@ -230,6 +236,8 @@ class PoseLabApp:
         self.root.bind("<Control-s>", lambda e: self.export_all())
         self.root.bind("<space>", self._on_space)
         self.root.bind("<Escape>", lambda e: self.stop())
+        self.root.bind("t", self._on_scene_key)
+        self.root.bind("T", self._on_scene_key)
 
     def _build_tab_main(self, tab) -> None:
         tk, ttk = self.tk, self.ttk
@@ -370,6 +378,35 @@ class PoseLabApp:
             style="Dim.TLabel", justify="left",
         ).pack(anchor="w", pady=(10, 0))
 
+    def _build_tab_scene(self, tab) -> None:
+        """行動観察用のシーンタグ付け (時間区間にラベルを付ける)。"""
+        tk, ttk = self.tk, self.ttk
+
+        ttk.Label(
+            tab,
+            text="再生中の時刻でラベル付き区間を記録します\n(行動コーディング用)。T キーでも開始/終了できます。",
+            justify="left", style="Dim.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+        row = ttk.Frame(tab)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="ラベル").pack(side="left")
+        self.scene_label_var = tk.StringVar(value="behavior")
+        ttk.Entry(row, textvariable=self.scene_label_var, width=18).pack(
+            side="right")
+        self.scene_button = ttk.Button(
+            tab, text="シーン開始  (T)", style="Accent.TButton",
+            command=self.toggle_scene)
+        self.scene_button.pack(fill="x", pady=4)
+        self.scene_list = tk.Listbox(
+            tab, height=10, bg=_BG_FIELD, fg=_FG,
+            selectbackground=_ACCENT, highlightthickness=0,
+        )
+        self.scene_list.pack(fill="both", expand=True, pady=4)
+        ttk.Button(tab, text="選択した区間を削除",
+                   command=self.delete_scene).pack(fill="x", pady=2)
+        ttk.Button(tab, text="シーン CSV へ保存...",
+                   command=self.export_scenes).pack(fill="x", pady=2)
+
     def _build_menu(self) -> None:
         tk = self.tk
         menubar = tk.Menu(self.root, bg=_BG_PANEL, fg=_FG,
@@ -427,6 +464,73 @@ class PoseLabApp:
         if isinstance(event.widget, (self.tk.Entry, self.tk.Text)):
             return
         self.toggle_pause()
+
+    def _on_scene_key(self, event) -> None:
+        if isinstance(event.widget, (self.tk.Entry, self.tk.Text)):
+            return
+        self.toggle_scene()
+
+    # ------------------------------------------------------------ シーンタグ
+    def toggle_scene(self) -> None:
+        """現在時刻でシーン区間の開始 / 終了を切り替える。"""
+        if self._scene_start is None:
+            label = self.scene_label_var.get().strip() or "scene"
+            self._scene_start = (label, self._last_ts_ms)
+            self.scene_button.config(text=f"シーン終了  (T) — {label} 記録中")
+            self.status.set(
+                f"シーン '{label}' 開始 (t={self._last_ts_ms / 1000.0:.2f}s)"
+            )
+        else:
+            label, start_ms = self._scene_start
+            end_ms = max(self._last_ts_ms, start_ms)
+            self._scenes.append((label, start_ms, end_ms))
+            self._scene_start = None
+            self.scene_button.config(text="シーン開始  (T)")
+            self.scene_list.insert(
+                "end",
+                f"{label}  {start_ms / 1000.0:.2f}s – {end_ms / 1000.0:.2f}s"
+                f"  ({(end_ms - start_ms) / 1000.0:.2f}s)",
+            )
+            self.status.set(f"シーン '{label}' を記録しました")
+
+    def delete_scene(self) -> None:
+        selection = self.scene_list.curselection()
+        if not selection:
+            return
+        index = selection[0]
+        self.scene_list.delete(index)
+        del self._scenes[index]
+
+    def export_scenes(self) -> None:
+        from tkinter import filedialog, messagebox
+
+        if not self._scenes:
+            messagebox.showinfo("poselab", "記録されたシーンがありません")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv", filetypes=[("CSV", "*.csv")]
+        )
+        if not path:
+            return
+        import csv as csv_mod
+
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv_mod.writer(f)
+            writer.writerow(
+                ["label", "start_ms", "end_ms", "start_s", "end_s", "duration_s"]
+            )
+            for label, start_ms, end_ms in self._scenes:
+                writer.writerow(
+                    [
+                        label,
+                        f"{start_ms:.3f}",
+                        f"{end_ms:.3f}",
+                        f"{start_ms / 1000.0:.3f}",
+                        f"{end_ms / 1000.0:.3f}",
+                        f"{(end_ms - start_ms) / 1000.0:.3f}",
+                    ]
+                )
+        self.status.set(f"シーン CSV を保存しました: {path}")
 
     # ------------------------------------------------------------ 入力ハンドラ
     def open_image(self) -> None:
@@ -663,6 +767,7 @@ class PoseLabApp:
 
     def _on_ui_frame(self, annotated: np.ndarray, result: FrameResult) -> None:
         self._last_annotated = annotated
+        self._last_ts_ms = result.timestamp_ms
         self._show_frame(annotated)
 
         now = time.monotonic()

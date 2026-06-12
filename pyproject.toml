@@ -39,7 +39,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "build", "twine"]
+plot = ["matplotlib>=3.7"]
+dev = ["pytest", "ruff", "build", "twine", "matplotlib>=3.7"]
 
 [project.urls]
 Homepage = "https://github.com/cfn0eft/3d"
@@ -48,6 +49,7 @@ Issues = "https://github.com/cfn0eft/3d/issues"
 [project.scripts]
 poselab = "poselab.cli:main"
 poselab-gui = "poselab.gui:main"
+poselab-plot = "poselab.plots:main"
 
 [tool.setuptools.packages.find]
 include = ["poselab*"]
