@@ -245,6 +245,8 @@ class PoseLabApp:
         self.mirror_var = tk.BooleanVar(value=self._setting("mirror", True))
         ttk.Checkbutton(cam, text="ミラー表示 (左右反転)",
                         variable=self.mirror_var).pack(anchor="w", pady=2)
+        ttk.Button(cam, text="使えるカメラを検索",
+                   command=self.scan_cameras_async).pack(fill="x", pady=2)
 
         cfg = ttk.LabelFrame(tab, text="モデル (次回開始時に適用)", padding=8)
         cfg.pack(fill="x", pady=8)
@@ -448,6 +450,28 @@ class PoseLabApp:
             lambda: CameraSource(index, mirror=mirror), static=False
         )
 
+    def scan_cameras_async(self) -> None:
+        """利用可能なカメラ番号をバックグラウンドで検索する。"""
+        self.status.set("カメラを検索中... (数秒かかります)")
+
+        def work() -> None:
+            from poselab.sources import scan_cameras
+
+            cameras = scan_cameras()
+            if cameras:
+                desc = ", ".join(
+                    f"{c['index']} ({c['width']}x{c['height']})" for c in cameras
+                )
+                msg = f"使えるカメラ: {desc} — カメラ番号に設定して開始してください"
+            else:
+                msg = (
+                    "カメラが見つかりません。接続と OS のカメラアクセス許可を"
+                    "確認してください"
+                )
+            self._frame_queue.put(("status_msg", msg, None))
+
+        threading.Thread(target=work, daemon=True).start()
+
     def stop(self) -> None:
         self._stop_flag.set()
         self._pause_flag.clear()
@@ -509,7 +533,11 @@ class PoseLabApp:
             try:
                 from poselab.backends import create_backend
 
-                source = source_factory()
+                try:
+                    source = source_factory()
+                except (IOError, OSError) as exc:
+                    self._frame_queue.put(("user_error", str(exc), None))
+                    return
                 self._frame_queue.put(
                     (
                         "info",
@@ -616,6 +644,15 @@ class PoseLabApp:
                     )
                     if payload.get("id_warnings"):
                         self._show_id_warnings(payload["id_warnings"])
+                elif kind == "user_error":
+                    from tkinter import messagebox
+
+                    self.rec_indicator.config(text="")
+                    first_line = payload.splitlines()[0]
+                    self.status.set(first_line)
+                    messagebox.showerror("poselab", payload)
+                elif kind == "status_msg":
+                    self.status.set(payload)
                 elif kind == "error":
                     self.rec_indicator.config(text="")
                     self.status.set("エラーが発生しました (詳細はコンソール)")
