@@ -6,8 +6,9 @@ GUI と CLI の両方から使用できます。
 
 ![GUI スクリーンショット](docs/images/gui_screenshot.png)
 
-*GUI: 骨格プレビュー、再生位置 (%)、関節角度のライブ表示、座標エクスポート
-(画面は推定結果の骨格のみを描画した例)*
+*GUI (ダークテーマ): 骨格プレビューとモーショントレイル、再生位置 (%)、
+記録インジケータ、タブ構成の設定パネル
+(画面は推定結果の骨格・軌跡のみを描画した例)*
 
 - 推定エンジン: [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) (Apache-2.0) を依存ライブラリとして利用
 - 本リポジトリのコードはすべて独自実装 (MIT ライセンス)
@@ -68,6 +69,10 @@ poselab --input squat.mp4 --angles-csv angles.csv --csv coords.csv --smooth 5
 # キーポイント速度 (px/s, m/s) と処理サマリ (検出率等) も出力
 poselab --input run.mp4 --velocity-csv vel.csv --summary-json summary.json
 
+# 手首・足首の軌跡 (直近 30 フレーム) を動画上にプロットして書き出し
+poselab --input swing.mp4 --save-video swing_trail.mp4 \
+        --trail 30 --trail-keypoints left_wrist,right_wrist,left_ankle,right_ankle
+
 # キーポイント名一覧 / 環境診断
 poselab --list-keypoints
 poselab --info
@@ -95,6 +100,8 @@ poselab --info
 | `--save-video` / `--save-image` | 骨格描画済みメディアの出力先 |
 | `--show` | プレビューウィンドウ表示 |
 | `--draw-labels` | キーポイント名も描画 |
+| `--trail N` | キーポイント軌跡を直近 N フレーム分プロット |
+| `--trail-keypoints` | 軌跡対象 (カンマ区切り、`all` で全 33 点) |
 | `--camera-mirror` | カメラ映像を左右反転 (鏡像) で処理 |
 | `--max-frames N` | 処理フレーム数の上限 |
 
@@ -104,11 +111,16 @@ poselab --info
 poselab-gui
 ```
 
+- **ダークテーマ UI**: ツールバー + タブ構成 (設定 / 記録・保存 / 一括処理 /
+  関節角度) で整理されたパネル、記録中インジケータ付きステータスバー
 - **入力**: 画像・動画ファイルを開く、またはカメラ番号を指定して開始
   (ミラー表示の切り替え可)。ショートカット: Ctrl+I (画像) / Ctrl+O (動画)
 - **ライブプレビュー**: 骨格オーバーレイ・FPS・再生位置 (% と時刻、
   カメラは LIVE 経過時間) を表示。Space で一時停止 / 再開、Esc で停止、
   表示中フレームの画像保存も可能
+- **軌跡のプロット**: 手首・足首などの移動軌跡 (モーショントレイル) を
+  実際の映像の上に重ねて表示。対象と長さは選択可能で、一括処理の
+  出力動画にも反映されます
 - **関節角度のライブ表示**: 10 関節の角度をリアルタイムでパネル表示
   (信頼度の低い値には ? マーク)
 - **記録**: 「座標を記録する」を有効にすると推定結果が蓄積され、

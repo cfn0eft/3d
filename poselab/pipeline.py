@@ -14,7 +14,7 @@ from poselab.exporters import Exporter
 from poselab.imgio import imwrite
 from poselab.sources import FrameSource
 from poselab.types import FrameResult
-from poselab.visualize import draw_result, draw_status
+from poselab.visualize import TrajectoryOverlay, draw_result, draw_status
 
 
 class VideoWriter:
@@ -47,6 +47,7 @@ def run_pipeline(
     image_output: Optional[Path] = None,
     draw: bool = True,
     draw_labels: bool = False,
+    trajectory: Optional[TrajectoryOverlay] = None,
     min_visibility: float = 0.3,
     show: bool = False,
     max_frames: Optional[int] = None,
@@ -83,9 +84,12 @@ def run_pipeline(
                 exporter.add(result)
 
             annotated = frame
+            if trajectory is not None:
+                trajectory.update(result)
+                annotated = trajectory.draw(annotated)
             if draw:
                 annotated = draw_result(
-                    frame, result, backend.skeleton,
+                    annotated, result, backend.skeleton,
                     min_visibility=min_visibility, draw_labels=draw_labels,
                 )
 

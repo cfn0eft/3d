@@ -89,6 +89,14 @@ def build_parser() -> argparse.ArgumentParser:
     g_view.add_argument("--no-draw", action="store_true", help="骨格描画を行わない")
     g_view.add_argument("--draw-labels", action="store_true", help="キーポイント名も描画する")
     g_view.add_argument(
+        "--trail", type=int, default=0, metavar="N",
+        help="キーポイントの軌跡を直近 N フレーム分描画 (0=無効)",
+    )
+    g_view.add_argument(
+        "--trail-keypoints", default="left_wrist,right_wrist",
+        help="軌跡を描画するキーポイント (カンマ区切り、all で全点)",
+    )
+    g_view.add_argument(
         "--min-visibility", type=float, default=0.3,
         help="描画する visibility のしきい値",
     )
@@ -229,6 +237,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     def progress(done: int, total: Optional[int]) -> None:
         reporter.update(done)
 
+    trajectory = None
+    if args.trail > 0:
+        from poselab.visualize import TrajectoryOverlay
+
+        trajectory = TrajectoryOverlay(
+            keypoint_names=[
+                n.strip() for n in args.trail_keypoints.split(",") if n.strip()
+            ],
+            length=args.trail,
+        )
+
     try:
         results = run_pipeline(
             source,
@@ -238,6 +257,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             image_output=args.save_image,
             draw=not args.no_draw,
             draw_labels=args.draw_labels,
+            trajectory=trajectory,
             min_visibility=args.min_visibility,
             show=args.show,
             max_frames=args.max_frames,
