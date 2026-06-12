@@ -184,6 +184,7 @@ function parseMmposeJson(obj, name) {
       return { id: idx, pts, ok };
     }),
   }));
+  const isH36m = names.some((n) => String(n).toLowerCase() === "root");
   const label = names.length === 17 ? "MMPose JSON (H36M 3D)" : "MMPose JSON";
   return finalizeModel({
     name,
@@ -192,6 +193,8 @@ function parseMmposeJson(obj, name) {
     edges: edges.length ? edges : edgesForNames(names),
     fps: null,
     frames,
+    // MMPose の 3D リフタ出力は z-up (x 反転・床基準) 規約
+    defaultAxis: isH36m ? "zup" : "ydown",
   });
 }
 
@@ -566,6 +569,7 @@ class PoseStage {
   /* raw → 表示座標 (y-up) */
   _disp(x, y, z) {
     if (this.opts.axis === "ydown") return [x, -y, -z];
+    if (this.opts.axis === "zup") return [x, z, y]; // MMPose 3D (z=高さ, y=奥行き)
     return [x, y, z];
   }
 
@@ -1099,6 +1103,9 @@ function setFrame(i, fromSlider = false) {
 
 function applyModel(m) {
   model = m;
+  const axis = m.defaultAxis || "ydown";
+  $("axis-select").value = axis;
+  stage.opts.axis = axis;
   stage.setModel(m);
   ui.empty.classList.add("hidden");
   ui.formatBadge.textContent = m.formatLabel;
