@@ -21,11 +21,12 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 
-def _require_matplotlib():
+def _require_matplotlib(show: bool = False):
     try:
         import matplotlib
 
-        matplotlib.use("Agg")
+        if not show:
+            matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
         return plt
@@ -85,10 +86,12 @@ def plot_csv(
     kind: Optional[str] = None,
     keypoints: Optional[List[str]] = None,
     person: int = 0,
+    frame: Optional[int] = None,
+    show: bool = False,
     dpi: int = 120,
 ) -> Path:
     """CSV からグラフ画像を生成して出力パスを返す。"""
-    plt = _require_matplotlib()
+    plt = _require_matplotlib(show)
     input_path = Path(input_path)
     csv_type, rows = _load(input_path, person)
 
@@ -126,6 +129,8 @@ def plot_csv(
             ax.set_xlabel("x [px]")
             ax.set_ylabel("y [px]")
             ax.set_title(f"position heatmap: {', '.join(series)} (person {person})")
+        elif kind == "pose3d":
+            fig = _plot_pose3d(plt, rows, person, frame)
         else:  # timeseries (デフォルト)
             fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
             for name, pts in series.items():
@@ -177,8 +182,69 @@ def plot_csv(
 
     fig.tight_layout()
     fig.savefig(output_path, dpi=dpi)
+    if show:
+        plt.show()
     plt.close(fig)
     return output_path
+
+
+def _plot_pose3d(plt, rows, person: int, frame: Optional[int]):
+    """ワールド座標 (3D) の骨格を 1 フレーム分描画する。"""
+    from poselab.skeleton import SKELETON_EDGES, landmark_side
+
+    frames = sorted({int(r["frame"]) for r in rows})
+    if frame is None:
+        frame = frames[len(frames) // 2]  # 中央フレーム
+    if frame not in frames:
+        raise SystemExit(f"フレーム {frame} のデータがありません (0–{frames[-1]})")
+    points: Dict[str, tuple] = {}
+    ts = 0.0
+    for r in rows:
+        if int(r["frame"]) != frame:
+            continue
+        ts = float(r["timestamp_ms"]) / 1000.0
+        if r.get("world_x"):
+            points[r["keypoint_name"]] = (
+                float(r["world_x"]), float(r["world_y"]), float(r["world_z"])
+            )
+    if not points:
+        raise SystemExit(
+            "ワールド座標 (world_x/y/z) がありません。座標 CSV を指定してください"
+        )
+
+    from poselab.skeleton import LANDMARK_NAMES
+
+    fig = plt.figure(figsize=(7, 7))
+    ax = fig.add_subplot(projection="3d")
+    colors = {"left": "tab:orange", "right": "tab:blue", "center": "tab:green"}
+    # 表示は (x, z, -y): MediaPipe ワールド座標は y が下向きのため上下を反転
+    for a, b in SKELETON_EDGES:
+        na, nb = LANDMARK_NAMES[a], LANDMARK_NAMES[b]
+        if na not in points or nb not in points:
+            continue
+        pa, pb = points[na], points[nb]
+        side = landmark_side(na)
+        if landmark_side(nb) != side:
+            side = "center"
+        ax.plot(
+            [pa[0], pb[0]], [pa[2], pb[2]], [-pa[1], -pb[1]],
+            color=colors[side], linewidth=2,
+        )
+    xs = [p[0] for p in points.values()]
+    ys = [p[2] for p in points.values()]
+    zs = [-p[1] for p in points.values()]
+    ax.scatter(xs, ys, zs, s=12, c="#444444")
+    limit = max(max(map(abs, xs)), max(map(abs, ys)), max(map(abs, zs)), 0.1)
+    ax.set_xlim(-limit, limit)
+    ax.set_ylim(-limit, limit)
+    ax.set_zlim(-limit, limit)
+    ax.set_box_aspect((1, 1, 1))
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel("z [m]")
+    ax.set_zlabel("height [m]")
+    ax.set_title(f"3D pose (person {person}, frame {frame}, t={ts:.2f}s)")
+    ax.view_init(elev=12, azim=-70)
+    return fig
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -192,8 +258,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--out", "-o", type=Path,
                         help="出力 PNG パス (省略時は入力名から自動)")
     parser.add_argument(
-        "--kind", choices=["timeseries", "trajectory", "heatmap"],
-        help="座標 CSV のグラフ種類",
+        "--kind", choices=["timeseries", "trajectory", "heatmap", "pose3d"],
+        help="座標 CSV のグラフ種類 (pose3d = 3D 骨格ビュー)",
+    )
+    parser.add_argument(
+        "--frame", type=int,
+        help="pose3d で表示するフレーム番号 (省略時は中央フレーム)",
+    )
+    parser.add_argument(
+        "--show", action="store_true",
+        help="保存後にウィンドウ表示 (pose3d はマウスで回転可能)",
     )
     parser.add_argument(
         "--keypoints", "-k",
@@ -209,7 +283,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     out = plot_csv(
         args.input, args.out, kind=args.kind,
-        keypoints=names, person=args.person, dpi=args.dpi,
+        keypoints=names, person=args.person,
+        frame=args.frame, show=args.show, dpi=args.dpi,
     )
     print(f"保存しました: {out}", file=sys.stderr)
     return 0

@@ -340,7 +340,8 @@ class PoseLabApp:
                    style="Accent.TButton",
                    command=self.export_all).pack(fill="x", pady=(0, 6))
         for label, fmt in (
-            ("座標 CSV...", "csv"),
+            ("座標 CSV (ロング)...", "csv"),
+            ("座標 CSV (ワイド)...", "wide"),
             ("JSON...", "json"),
             ("NumPy NPZ...", "npz"),
             ("関節角度 CSV...", "angles"),
@@ -431,7 +432,8 @@ class PoseLabApp:
                              command=self.export_all)
         m_export.add_separator()
         for label, fmt in (
-            ("座標 CSV...", "csv"), ("JSON...", "json"), ("NumPy NPZ...", "npz"),
+            ("座標 CSV (ロング)...", "csv"), ("座標 CSV (ワイド)...", "wide"),
+            ("JSON...", "json"), ("NumPy NPZ...", "npz"),
             ("関節角度 CSV...", "angles"), ("速度 CSV...", "velocity"),
         ):
             m_export.add_command(
@@ -891,6 +893,10 @@ class PoseLabApp:
     def _make_exporter(self, fmt: str, path: str):
         if fmt == "csv":
             return CsvExporter(path)
+        if fmt == "wide":
+            from poselab.exporters import WideCsvExporter
+
+            return WideCsvExporter(path, LANDMARK_NAMES)
         if fmt == "json":
             return JsonExporter(
                 path, LANDMARK_NAMES, {"tool": f"poselab {__version__}"}
@@ -918,7 +924,7 @@ class PoseLabApp:
             messagebox.showinfo("poselab", "記録されたフレームがありません")
             return
         ext = {
-            "csv": ".csv", "json": ".json", "npz": ".npz",
+            "csv": ".csv", "wide": ".csv", "json": ".json", "npz": ".npz",
             "angles": ".csv", "velocity": ".csv",
         }[fmt]
         path = filedialog.asksaveasfilename(
@@ -946,7 +952,8 @@ class PoseLabApp:
             return
         base_path = Path(base).with_suffix("")
         targets = [
-            ("csv", str(base_path) + ".csv"),
+            ("csv", str(base_path) + "_long.csv"),
+            ("wide", str(base_path) + "_wide.csv"),
             ("json", str(base_path) + ".json"),
             ("npz", str(base_path) + ".npz"),
             ("angles", str(base_path) + "_angles.csv"),
@@ -954,7 +961,7 @@ class PoseLabApp:
         ]
         exporters = [self._make_exporter(fmt, path) for fmt, path in targets]
         export_results(self._recorded_for_export(), exporters)
-        self.status.set(f"5 形式で保存しました: {base_path}.*")
+        self.status.set(f"6 形式で保存しました: {base_path}_*.*")
 
     # ------------------------------------------------------------ 一括処理
     def batch_process(self) -> None:

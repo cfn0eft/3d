@@ -71,6 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     g_out = parser.add_argument_group("出力")
     g_out.add_argument("--csv", type=Path, help="座標を CSV (ロング形式) で出力")
+    g_out.add_argument(
+        "--wide-csv", type=Path,
+        help="座標を CSV (ワイド形式、1 行 = 1 フレーム) で出力",
+    )
+    g_out.add_argument(
+        "--auto-output", action="store_true",
+        help="動画と同じ場所の <動画名>_poselab/ フォルダへ全形式を一括出力 "
+             "(複数動画の連続処理に対応)",
+    )
     g_out.add_argument("--json", type=Path, help="座標を JSON で出力")
     g_out.add_argument("--npz", type=Path, help="座標を NumPy .npz で出力")
     g_out.add_argument(
@@ -98,6 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="座標を N フレームの移動平均で平滑化してから出力 (0=無効)",
     )
     g_out.add_argument("--save-video", type=Path, help="骨格を描画した動画を保存")
+    g_out.add_argument(
+        "--h264", action="store_true",
+        help="--save-video の動画を H.264 に再エンコード "
+             "(ブラウザ再生可、要 ffmpeg)",
+    )
     g_out.add_argument("--save-image", type=Path, help="骨格を描画した画像を保存 (静止画入力時)")
 
     g_view = parser.add_argument_group("表示・描画")
@@ -192,8 +206,52 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.input:
         parser.error("--input を指定してください (--list-keypoints 以外では必須)")
 
+    if args.auto_output:
+        return _run_auto_output(parser, args)
+    return _run_job(parser, args, args.input)
+
+
+def _run_auto_output(parser: argparse.ArgumentParser, args) -> int:
+    """入力ごとに <名前>_poselab/ フォルダを作って全形式を出力する。"""
+    from poselab.sources import IMAGE_EXTENSIONS
+
+    specs = [Path(s) for s in args.input]
+    for spec in specs:
+        if str(spec).lower().startswith(("camera:", "cam:")):
+            parser.error("--auto-output はカメラ入力では使用できません")
+        if not spec.exists():
+            parser.error(f"入力ファイルが見つかりません: {spec}")
+
+    total = len(specs)
+    for i, spec in enumerate(specs):
+        job = argparse.Namespace(**vars(args))
+        stem = spec.stem
+        out_dir = spec.parent / f"{stem}_poselab"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        job.csv = out_dir / f"{stem}_long.csv"
+        job.wide_csv = out_dir / f"{stem}_wide.csv"
+        job.json = out_dir / f"{stem}.json"
+        job.angles_csv = out_dir / f"{stem}_angles.csv"
+        job.summary_json = out_dir / f"{stem}_summary.json"
+        if spec.suffix.lower() in IMAGE_EXTENSIONS:
+            job.save_image = out_dir / f"{stem}_annotated.png"
+            job.save_video = None
+        else:
+            job.save_video = out_dir / f"{stem}_annotated.mp4"
+            job.save_image = None
+            job.h264 = True
+        if not args.quiet and total > 1:
+            print(f"=== 入力 {i + 1}/{total}: {spec}", file=sys.stderr)
+        code = _run_job(parser, job, [str(spec)])
+        if code != 0:
+            return code
+        if not args.quiet:
+            print(f"  出力フォルダ: {out_dir}", file=sys.stderr)
+    return 0
+
+
+def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
     # 入力ソースの決定
-    specs = args.input
     image_paths = [s for s in specs if Path(s).suffix.lower() in
                    {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}]
     if len(specs) > 1:
@@ -235,6 +293,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         exporters: List[Exporter] = []
         if args.csv:
             exporters.append(CsvExporter(args.csv))
+        if args.wide_csv:
+            from poselab.exporters import WideCsvExporter
+
+            exporters.append(WideCsvExporter(args.wide_csv, LANDMARK_NAMES))
         if args.json:
             exporters.append(JsonExporter(args.json, LANDMARK_NAMES, metadata))
         if args.npz:
@@ -324,6 +386,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         results = smooth_results(results, args.smooth)
         export_results(results, build_exporters())
 
+    if args.save_video and args.h264:
+        from poselab.pipeline import reencode_h264
+
+        if not reencode_h264(args.save_video):
+            print(
+                "注意: ffmpeg が見つからないため H.264 再エンコードを"
+                "スキップしました (mp4v のままです)",
+                file=sys.stderr,
+            )
+
     from poselab.analysis import summarize_results
 
     summary = summarize_results(results)
@@ -360,7 +432,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             file=sys.stderr,
         )
         for label, path in (
-            ("CSV", args.csv), ("JSON", args.json), ("NPZ", args.npz),
+            ("CSV", args.csv), ("ワイドCSV", args.wide_csv),
+            ("JSON", args.json), ("NPZ", args.npz),
             ("角度CSV", args.angles_csv), ("速度CSV", args.velocity_csv),
             ("距離CSV", args.distance_csv), ("サマリ", args.summary_json),
             ("動画", args.save_video), ("画像", args.save_image),

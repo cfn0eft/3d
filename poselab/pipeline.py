@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
@@ -38,6 +40,32 @@ class VideoWriter:
     def close(self) -> None:
         if self._writer is not None:
             self._writer.release()
+
+
+def reencode_h264(path: "str | Path") -> bool:
+    """動画を H.264 (yuv420p, faststart) に再エンコードする。
+
+    ブラウザや多くのプレーヤーで再生できる形式にする。ffmpeg が
+    PATH にない場合は何もせず False を返す。
+    """
+    if shutil.which("ffmpeg") is None:
+        return False
+    path = Path(path)
+    tmp = path.with_name(path.stem + ".h264tmp.mp4")
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-i", str(path),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        str(tmp),
+    ]
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError:
+        tmp.unlink(missing_ok=True)
+        return False
+    tmp.replace(path)
+    return True
 
 
 def run_pipeline(

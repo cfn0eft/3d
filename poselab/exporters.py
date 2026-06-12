@@ -89,6 +89,54 @@ class CsvExporter(Exporter):
         self._file.close()
 
 
+class WideCsvExporter(Exporter):
+    """ワイド形式 CSV (1 行 = 1 フレーム × 1 人物)。
+
+    キーポイントごとに x / y / z / visibility / world_x / world_y /
+    world_z の列を持つ。Excel や MATLAB でそのまま扱いやすい形式。
+    """
+
+    _PER_KP = ("x", "y", "z", "visibility", "world_x", "world_y", "world_z")
+
+    def __init__(
+        self, path: "str | Path", keypoint_names: Sequence[str]
+    ) -> None:
+        self.path = Path(path)
+        self.names = list(keypoint_names)
+        self._file = open(self.path, "w", newline="", encoding="utf-8")
+        self._writer = csv.writer(self._file)
+        header = ["frame", "timestamp_ms", "person"]
+        for name in self.names:
+            header.extend(f"{name}_{suffix}" for suffix in self._PER_KP)
+        self._writer.writerow(header)
+
+    def add(self, result: FrameResult) -> None:
+        for person in result.persons:
+            world = {wk.index: wk for wk in person.world_keypoints}
+            row = [
+                result.frame_index,
+                f"{result.timestamp_ms:.3f}",
+                person.person_index,
+            ]
+            for kp in person.keypoints:
+                wk = world.get(kp.index)
+                row.extend(
+                    [
+                        f"{kp.x_px:.3f}",
+                        f"{kp.y_px:.3f}",
+                        f"{kp.z:.6f}",
+                        f"{kp.visibility:.4f}",
+                        f"{wk.x:.6f}" if wk else "",
+                        f"{wk.y:.6f}" if wk else "",
+                        f"{wk.z:.6f}" if wk else "",
+                    ]
+                )
+            self._writer.writerow(row)
+
+    def close(self) -> None:
+        self._file.close()
+
+
 class JsonExporter(Exporter):
     """フレーム単位の構造化 JSON (ストリーミング書き込み)。"""
 
