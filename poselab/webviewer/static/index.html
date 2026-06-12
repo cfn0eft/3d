@@ -180,6 +180,50 @@
           </label>
         </section>
 
+        <section class="card" id="card-export">
+          <header class="card-head">
+            <h2>エクスポート</h2>
+            <span class="badge" id="export-count">—</span>
+          </header>
+          <label class="row select-row">
+            <span>形式</span>
+            <select id="export-format">
+              <option value="wide-csv" selected>ワイド CSV</option>
+              <option value="long-csv">ロング CSV</option>
+              <option value="poselab-json">poselab JSON</option>
+              <option value="mmpose-json">MMPose JSON</option>
+            </select>
+          </label>
+          <label class="row select-row">
+            <span>人物</span>
+            <select id="export-persons">
+              <option value="visible" selected>表示中のみ</option>
+              <option value="all">全員</option>
+            </select>
+          </label>
+          <div class="row range-row">
+            <span>フレーム</span>
+            <div class="range-inputs mono">
+              <input type="number" id="export-start" min="1" value="1" />
+              <em>–</em>
+              <input type="number" id="export-end" min="1" value="1" />
+            </div>
+          </div>
+          <div class="joints-head">
+            <span>関節</span>
+            <div class="joints-tools">
+              <button class="mini" id="export-joints-all">全選択</button>
+              <button class="mini" id="export-joints-none">解除</button>
+            </div>
+          </div>
+          <select id="export-joints" multiple size="6" class="mono"></select>
+          <label class="row switch-row" title="センタリング・正規化・座標系の表示設定を適用した座標で書き出す">
+            <span>表示変換を適用</span>
+            <input type="checkbox" id="export-transform" /><i></i>
+          </label>
+          <button class="btn primary export-btn" id="btn-export">選択をダウンロード</button>
+        </section>
+
         <section class="card card-hint">
           <p>
             <strong>poselab</strong> での出力例:<br />

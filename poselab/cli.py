@@ -25,6 +25,51 @@ from poselab.pipeline import VideoWriter, run_pipeline
 from poselab.skeleton import LANDMARK_NAMES
 from poselab.sources import ImageSource, open_source
 
+# --auto-output で選択できる出力形式 (--outputs)
+AUTO_OUTPUT_FORMATS = ("long", "wide", "json", "angles", "summary", "video", "image")
+
+
+def parse_outputs(value: "str | None", parser: argparse.ArgumentParser) -> set:
+    """--outputs のカンマ区切りリストを検証して set にする (None = 全形式)。"""
+    if value is None:
+        return set(AUTO_OUTPUT_FORMATS)
+    tokens = {t.strip() for t in str(value).split(",") if t.strip()}
+    if not tokens:
+        parser.error("--outputs に形式が指定されていません")
+    invalid = sorted(tokens - set(AUTO_OUTPUT_FORMATS))
+    if invalid:
+        parser.error(
+            f"--outputs に不明な形式があります: {', '.join(invalid)} "
+            f"(指定可能: {', '.join(AUTO_OUTPUT_FORMATS)})"
+        )
+    return tokens
+
+
+def auto_output_paths(spec: Path, selected: set, is_image: bool) -> dict:
+    """--auto-output の 1 入力分の出力先パスを選択形式に応じて組み立てる。"""
+    stem = spec.stem
+    out_dir = spec.parent / f"{stem}_poselab"
+    return {
+        "out_dir": out_dir,
+        "csv": out_dir / f"{stem}_long.csv" if "long" in selected else None,
+        "wide_csv": out_dir / f"{stem}_wide.csv" if "wide" in selected else None,
+        "json": out_dir / f"{stem}.json" if "json" in selected else None,
+        "angles_csv": (
+            out_dir / f"{stem}_angles.csv" if "angles" in selected else None
+        ),
+        "summary_json": (
+            out_dir / f"{stem}_summary.json" if "summary" in selected else None
+        ),
+        "save_image": (
+            out_dir / f"{stem}_annotated.png"
+            if is_image and "image" in selected else None
+        ),
+        "save_video": (
+            out_dir / f"{stem}_annotated.mp4"
+            if not is_image and "video" in selected else None
+        ),
+    }
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -105,8 +150,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_out.add_argument(
         "--auto-output", action="store_true",
-        help="動画と同じ場所の <動画名>_poselab/ フォルダへ全形式を一括出力 "
-             "(複数動画の連続処理に対応)",
+        help="動画と同じ場所の <動画名>_poselab/ フォルダへ一括出力 "
+             "(複数動画の連続処理に対応。既定は全形式、--outputs で選択)",
+    )
+    g_out.add_argument(
+        "--outputs", metavar="LIST", default=None,
+        help="--auto-output で書き出す形式をカンマ区切りで選択。"
+             f"指定可能: {', '.join(AUTO_OUTPUT_FORMATS)} "
+             "(例: --outputs json,wide。既定: すべて)",
     )
     g_out.add_argument("--json", type=Path, help="座標を JSON で出力")
     g_out.add_argument("--npz", type=Path, help="座標を NumPy .npz で出力")
@@ -256,6 +307,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.input:
         parser.error("--input を指定してください (--list-keypoints 以外では必須)")
 
+    if args.outputs is not None and not args.auto_output:
+        parser.error("--outputs は --auto-output と併用してください")
+
     if args.auto_output:
         return _run_auto_output(parser, args)
     return _run_job(parser, args, args.input)
@@ -272,23 +326,22 @@ def _run_auto_output(parser: argparse.ArgumentParser, args) -> int:
         if not spec.exists():
             parser.error(f"入力ファイルが見つかりません: {spec}")
 
+    selected = parse_outputs(args.outputs, parser)
     total = len(specs)
     for i, spec in enumerate(specs):
         job = argparse.Namespace(**vars(args))
-        stem = spec.stem
-        out_dir = spec.parent / f"{stem}_poselab"
+        is_image = spec.suffix.lower() in IMAGE_EXTENSIONS
+        paths = auto_output_paths(spec, selected, is_image)
+        out_dir = paths["out_dir"]
         out_dir.mkdir(parents=True, exist_ok=True)
-        job.csv = out_dir / f"{stem}_long.csv"
-        job.wide_csv = out_dir / f"{stem}_wide.csv"
-        job.json = out_dir / f"{stem}.json"
-        job.angles_csv = out_dir / f"{stem}_angles.csv"
-        job.summary_json = out_dir / f"{stem}_summary.json"
-        if spec.suffix.lower() in IMAGE_EXTENSIONS:
-            job.save_image = out_dir / f"{stem}_annotated.png"
-            job.save_video = None
-        else:
-            job.save_video = out_dir / f"{stem}_annotated.mp4"
-            job.save_image = None
+        job.csv = paths["csv"]
+        job.wide_csv = paths["wide_csv"]
+        job.json = paths["json"]
+        job.angles_csv = paths["angles_csv"]
+        job.summary_json = paths["summary_json"]
+        job.save_image = paths["save_image"]
+        job.save_video = paths["save_video"]
+        if job.save_video is not None:
             job.h264 = True
         if not args.quiet and total > 1:
             print(f"=== 入力 {i + 1}/{total}: {spec}", file=sys.stderr)

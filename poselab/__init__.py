@@ -4,7 +4,7 @@
 2D・3D キーポイント座標の推定とエクスポートができます。
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 from poselab.types import FrameResult, Keypoint, PersonPose, WorldKeypoint
 

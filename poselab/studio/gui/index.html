@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Pose3D Studio</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='1' stop-color='%23a78bfa'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%230b101a'/%3E%3Cg stroke='url(%23g)' stroke-width='4' stroke-linecap='round' fill='none'%3E%3Ccircle cx='32' cy='15' r='6'/%3E%3Cpath d='M32 22v16M32 26l-11 7M32 26l11 7M32 38l-8 13M32 38l8 13'/%3E%3C/g%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+      <div class="bg-grid"></div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="brand-g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#22d3ee" />
+              <stop offset="1" stop-color="#a78bfa" />
+            </linearGradient>
+          </defs>
+          <g stroke="url(#brand-g)" stroke-width="4.5" stroke-linecap="round" fill="none">
+            <circle cx="32" cy="14" r="6.5" />
+            <path d="M32 22v16M32 26l-12 8M32 26l12 8M32 38l-9 14M32 38l9 14" />
+          </g>
+        </svg>
+        <div class="brand-text">
+          <strong>Pose3D Studio</strong>
+          <span>Research 3D Pose Pipeline</span>
+        </div>
+      </div>
+      <div class="status-pills">
+        <div class="pill">
+          <span>GPU</span>
+          <strong id="gpu-status">Checking...</strong>
+        </div>
+        <div class="pill">
+          <span>Server</span>
+          <strong id="server-status">Ready</strong>
+        </div>
+      </div>
+    </header>
+
+    <main class="shell">
+      <!-- ============ 左カラム: ジョブ設定 ============ -->
+      <section class="col">
+        <div class="card">
+          <div class="card-head">
+            <h2>ジョブ設定</h2>
+            <span class="badge">inference</span>
+          </div>
+
+          <label class="field">
+            <span>プリセット</span>
+            <select id="preset">
+              <option value="research" selected>Research (フル出力)</option>
+              <option value="fast">Fast (高速)</option>
+              <option value="preview">Preview (動画優先)</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>モデルプロファイル</span>
+            <select id="model-profile">
+              <option value="balanced" selected>Balanced (標準)</option>
+              <option value="accuracy">Accuracy (RTMPose-L 384×288 + 243frm)</option>
+            </select>
+            <small>高精度プロファイルは追加のチェックポイントが必要です。</small>
+          </label>
+
+          <label class="field">
+            <span>検出器プロファイル</span>
+            <select id="detector-profile">
+              <option value="balanced" selected>Balanced (RTMDet-M)</option>
+              <option value="accuracy">Accuracy (Faster R-CNN R50-FPN)</option>
+            </select>
+            <small>Accuracy 検出器は速度が低下します。</small>
+          </label>
+
+          <label class="field">
+            <span>入力動画</span>
+            <div class="field-row">
+              <input id="input-path" type="text" placeholder="C:\path\to\video.mp4" />
+              <button id="browse-input" class="btn ghost">参照</button>
+            </div>
+          </label>
+
+          <div class="queue-actions">
+            <button id="add-queue" class="btn ghost">キューに追加</button>
+            <button id="browse-multi" class="btn ghost">複数追加</button>
+            <button id="browse-folder" class="btn ghost">フォルダ追加</button>
+            <button id="clear-queue" class="btn ghost warn">キュー消去</button>
+          </div>
+
+          <div class="queue">
+            <div class="queue-head">
+              <h3>キュー</h3>
+              <span id="queue-meta">0 items</span>
+            </div>
+            <ul id="queue-list"></ul>
+          </div>
+
+          <label class="field">
+            <span>出力フォルダ</span>
+            <input id="output-root" type="text" placeholder="auto" />
+            <small>自動: 動画と同じ場所 + 動画名のフォルダ。</small>
+          </label>
+
+          <div class="field">
+            <span>処理オプション</span>
+            <div class="switch-grid">
+              <label class="switch-row">
+                <span>H.264 再エンコード</span>
+                <input id="reencode" type="checkbox" checked /><i></i>
+              </label>
+              <label class="switch-row">
+                <span>進捗バー表示</span>
+                <input id="progress" type="checkbox" checked /><i></i>
+              </label>
+            </div>
+          </div>
+
+          <div class="field">
+            <span>出力オプション</span>
+            <div class="switch-grid">
+              <label class="switch-row">
+                <span>腰を原点に固定</span>
+                <input id="center-root" type="checkbox" checked /><i></i>
+              </label>
+              <label class="switch-row">
+                <span>体格スケール正規化</span>
+                <input id="normalize-scale" type="checkbox" /><i></i>
+              </label>
+            </div>
+            <small>root=pelvis、scale=root→thorax を基準に正規化します。</small>
+          </div>
+
+          <label class="field">
+            <span>CSV 形式</span>
+            <select id="csv-format">
+              <option value="wide">wide (1 行 = 1 フレーム)</option>
+              <option value="long">long (1 行 = 1 キーポイント)</option>
+              <option value="both" selected>both (両方)</option>
+            </select>
+          </label>
+
+          <button id="run-btn" class="btn run">
+            <span>Run Pipeline</span>
+            <em>GPU required</em>
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>システムチェック</h2>
+            <button id="refresh-checks" class="btn ghost slim">再チェック</button>
+          </div>
+          <ul id="check-list" class="check-list"></ul>
+          <div id="video-info" class="meta"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>モデルダウンロード</h2>
+            <span class="badge" id="downloads-meta">Ready</span>
+          </div>
+          <ul id="downloads-list" class="downloads-list"></ul>
+        </div>
+
+        <div class="card hint">
+          <strong>Tip:</strong> 安定動作のため絶対パスを推奨します。
+          結果 JSON / CSV は下の 3D ビューアへドラッグ & ドロップでも読み込めます。
+        </div>
+      </section>
+
+      <!-- ============ 右カラム: 進捗・ビューア・結果 ============ -->
+      <section class="col">
+        <div class="card progress-card">
+          <div class="card-head">
+            <h2>進捗</h2>
+            <div class="progress-actions">
+              <span id="progress-text" class="mono">Idle</span>
+              <button id="cancel-btn" class="btn ghost warn slim">停止</button>
+            </div>
+          </div>
+          <div class="progress-bar"><div id="progress-fill"></div></div>
+        </div>
+
+        <div class="card viewer-card">
+          <div class="card-head">
+            <h2>3D ビューア</h2>
+            <div class="viewer-top-actions">
+              <button class="chip" data-view="front">正面</button>
+              <button class="chip" data-view="side">側面</button>
+              <button class="chip" data-view="top">上面</button>
+              <button class="chip" id="viewer-fit">フィット</button>
+              <button class="chip" id="viewer-reset">リセット</button>
+              <button class="chip accent" id="viewer-open">JSON/CSV を開く</button>
+              <button class="chip" id="viewer-demo">デモ</button>
+            </div>
+          </div>
+          <div class="viewer-stage" id="viewer-stage">
+            <canvas id="viewer-canvas"></canvas>
+            <div class="viewer-hint mono">
+              ドラッグ 回転 · ホイール ズーム · Shift+ドラッグ 移動 · ファイルをドロップで読込
+            </div>
+          </div>
+          <div class="viewer-timeline">
+            <button id="viewer-play" class="btn play" title="再生 / 一時停止">▶</button>
+            <input id="viewer-frame" type="range" min="0" max="0" value="0" />
+            <span id="viewer-frame-label" class="mono">Frame 0 / 0</span>
+            <label class="viewer-fps mono">
+              FPS
+              <input id="viewer-fps" type="number" min="1" max="240" value="30" />
+            </label>
+          </div>
+          <div class="viewer-controls">
+            <label class="vc">
+              座標系
+              <select id="viewer-axis">
+                <option value="ydown" selected>Y 下向き (カメラ系)</option>
+                <option value="zup">Z 上向き (MMPose 3D)</option>
+                <option value="yup">Y 上向き (そのまま)</option>
+              </select>
+            </label>
+            <label class="vc">
+              人物
+              <select id="viewer-instance"></select>
+            </label>
+            <label class="vc">
+              ハイライト
+              <select id="viewer-joint"></select>
+            </label>
+            <label class="vc">
+              スケール
+              <input id="viewer-scale" type="range" min="0.4" max="2.5" step="0.05" value="1" />
+            </label>
+            <label class="vc">
+              ヨー
+              <input id="viewer-yaw" type="range" min="-180" max="180" step="1" value="-32" />
+            </label>
+            <label class="vc">
+              ピッチ
+              <input id="viewer-pitch" type="range" min="-89" max="89" step="1" value="12" />
+            </label>
+            <label class="switch-row vc-switch">
+              <span>腰を原点に固定</span>
+              <input id="viewer-center" type="checkbox" checked /><i></i>
+            </label>
+            <label class="switch-row vc-switch">
+              <span>体格スケール正規化</span>
+              <input id="viewer-normalize" type="checkbox" /><i></i>
+            </label>
+          </div>
+          <div class="viewer-export">
+            <div class="ve-head">
+              <h3>エクスポート</h3>
+              <div class="joints-tools">
+                <button class="mini" id="viewer-export-joints-all">全選択</button>
+                <button class="mini" id="viewer-export-joints-none">解除</button>
+              </div>
+            </div>
+            <div class="ve-grid">
+              <label class="vc">
+                形式
+                <select id="viewer-export-format">
+                  <option value="wide-csv" selected>ワイド CSV</option>
+                  <option value="long-csv">ロング CSV</option>
+                  <option value="poselab-json">poselab JSON</option>
+                  <option value="mmpose-json">MMPose JSON</option>
+                </select>
+              </label>
+              <label class="vc">
+                人物
+                <select id="viewer-export-persons">
+                  <option value="visible" selected>表示中のみ</option>
+                  <option value="all">全員</option>
+                </select>
+              </label>
+              <label class="vc">
+                フレーム範囲
+                <span class="range-inputs mono">
+                  <input type="number" id="viewer-export-start" min="1" value="1" />
+                  <em>–</em>
+                  <input type="number" id="viewer-export-end" min="1" value="1" />
+                </span>
+              </label>
+            </div>
+            <select id="viewer-export-joints" multiple size="5" class="mono"></select>
+            <div class="ve-foot">
+              <label class="switch-row vc-switch">
+                <span>表示変換を適用</span>
+                <input id="viewer-export-transform" type="checkbox" /><i></i>
+              </label>
+              <button class="btn primary" id="viewer-export-btn">選択をダウンロード</button>
+            </div>
+          </div>
+          <input id="viewer-file" type="file" accept=".json,.csv" hidden />
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>プレビュー</h2>
+            <button id="open-video" class="btn ghost slim">動画を開く</button>
+          </div>
+          <video id="preview-video" controls></video>
+          <div id="preview-summary" class="meta"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>出力ファイル</h2>
+            <button id="open-output" class="btn ghost slim">フォルダを開く</button>
+          </div>
+          <ul id="output-list" class="output-list"></ul>
+        </div>
+
+        <div class="card log-card">
+          <div class="card-head">
+            <h2>ライブログ</h2>
+            <button id="clear-log" class="btn ghost slim">クリア</button>
+          </div>
+          <pre id="log-output"></pre>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>履歴</h2>
+          </div>
+          <ul id="history-list" class="history-list"></ul>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
