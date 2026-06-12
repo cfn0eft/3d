@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from poselab.imgio import imread, imwrite
 from poselab.sources import ImageSource

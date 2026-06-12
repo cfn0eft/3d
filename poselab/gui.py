@@ -134,17 +134,20 @@ class PoseLabApp:
 
         cfg = ttk.LabelFrame(panel, text="モデル設定 (次回開始時に適用)", padding=6)
         cfg.pack(fill="x", pady=6)
-        row = ttk.Frame(cfg); row.pack(fill="x", pady=2)
+        row = ttk.Frame(cfg)
+        row.pack(fill="x", pady=2)
         ttk.Label(row, text="モデル").pack(side="left")
         self.model_var = tk.StringVar(value=self._setting("model", "lite"))
         ttk.Combobox(row, textvariable=self.model_var, values=list(MODEL_VARIANTS),
                      state="readonly", width=8).pack(side="right")
-        row = ttk.Frame(cfg); row.pack(fill="x", pady=2)
+        row = ttk.Frame(cfg)
+        row.pack(fill="x", pady=2)
         ttk.Label(row, text="最大人数").pack(side="left")
         self.num_poses = tk.IntVar(value=self._setting("num_poses", 1))
         ttk.Spinbox(row, from_=1, to=10, width=4,
                     textvariable=self.num_poses).pack(side="right")
-        row = ttk.Frame(cfg); row.pack(fill="x", pady=2)
+        row = ttk.Frame(cfg)
+        row.pack(fill="x", pady=2)
         ttk.Label(row, text="検出しきい値").pack(side="left")
         self.det_conf = tk.DoubleVar(value=self._setting("det_conf", 0.5))
         ttk.Spinbox(row, from_=0.1, to=0.9, increment=0.1, width=4,
@@ -178,7 +181,8 @@ class PoseLabApp:
         ttk.Checkbutton(rec, text="座標を記録する", variable=self.record_var).pack(anchor="w")
         self.rec_label = ttk.Label(rec, text="記録: 0 フレーム")
         self.rec_label.pack(anchor="w", pady=2)
-        smooth_row = ttk.Frame(rec); smooth_row.pack(fill="x", pady=2)
+        smooth_row = ttk.Frame(rec)
+        smooth_row.pack(fill="x", pady=2)
         ttk.Label(smooth_row, text="平滑化 (フレーム, 0=なし)").pack(side="left")
         self.smooth_window = tk.IntVar(value=self._setting("smooth_window", 0))
         ttk.Spinbox(smooth_row, from_=0, to=31, width=4,

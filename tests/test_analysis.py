@@ -1,6 +1,5 @@
 import math
 
-import numpy as np
 import pytest
 
 from poselab.analysis import (

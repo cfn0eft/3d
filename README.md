@@ -4,6 +4,11 @@
 座標データを CSV / JSON / NumPy 形式でエクスポートできるツールです。
 GUI と CLI の両方から使用できます。
 
+![GUI スクリーンショット](docs/images/gui_screenshot.png)
+
+*GUI: 骨格プレビュー、再生位置 (%)、関節角度のライブ表示、座標エクスポート
+(画面は推定結果の骨格のみを描画した例)*
+
 - 推定エンジン: [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) (Apache-2.0) を依存ライブラリとして利用
 - 本リポジトリのコードはすべて独自実装 (MIT ライセンス)
 - 2D ピクセル座標・正規化座標・3D ワールド座標 (メートル単位) ・信頼度を出力
@@ -18,6 +23,9 @@ git clone <this-repo>
 cd 3d
 pip install -e .
 ```
+
+(PyPI 公開後は `pip install poselab-toolkit` でもインストールできる予定です。
+配布名は poselab-toolkit ですが、import 名・コマンド名は `poselab` です)
 
 GUI を使う場合は tkinter も必要です (多くの環境では同梱。Ubuntu では
 `sudo apt install python3-tk`)。
@@ -113,6 +121,10 @@ poselab-gui
   次回起動時に復元されます
 
 ## 出力フォーマット
+
+![骨格出力例](docs/images/skeleton_output.png)
+
+*推定された 33 キーポイント (左半身=オレンジ、右半身=水色、体幹=緑)*
 
 ### CSV (ロング形式、1 行 = 1 キーポイント)
 

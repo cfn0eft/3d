@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 
