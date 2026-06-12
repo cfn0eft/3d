@@ -1037,6 +1037,179 @@ class PoseStage {
 }
 
 /* ================================================================
+   エクスポート — 選択した人物・関節・フレーム範囲を各形式の文字列へ
+   (DOM 非依存のピュア関数群)
+   ================================================================ */
+
+// 選択条件でモデルからエクスポート用の中間表現を作る。
+// opts: { persons: Set<id>|null, joints: number[]|null,
+//         start, end (0 始まり・両端含む), fps,
+//         points: (frame) => [{person, out}] | null  — 表示変換の注入用 }
+function collectExport(model, opts = {}) {
+  const J = model.names.length;
+  const joints = (opts.joints && opts.joints.length)
+    ? opts.joints.filter((j) => j >= 0 && j < J)
+    : model.names.map((_, i) => i);
+  const personFilter = opts.persons instanceof Set ? opts.persons : null;
+  const last = model.frames.length - 1;
+  const start = clamp(Math.round(opts.start ?? 0), 0, last);
+  const end = clamp(Math.round(opts.end ?? last), start, last);
+  const fps = opts.fps || model.fps || 30;
+
+  const records = [];
+  for (let i = start; i <= end; i += 1) {
+    const frame = model.frames[i];
+    const entries = opts.points
+      ? opts.points(frame)
+      : frame.persons.map((p) => ({ person: p, out: p.pts }));
+    const persons = [];
+    for (const { person, out } of entries) {
+      if (personFilter && !personFilter.has(person.id)) continue;
+      const pts = [];
+      const ok = [];
+      joints.forEach((j) => {
+        pts.push([out[j * 3], out[j * 3 + 1], out[j * 3 + 2]]);
+        ok.push(person.ok[j] ? 1 : 0);
+      });
+      persons.push({ id: person.id, pts, ok });
+    }
+    records.push({
+      frame: i,
+      t: frame.t != null ? frame.t : i / fps,
+      persons,
+    });
+  }
+  return {
+    names: joints.map((j) => model.names[j]),
+    joints,
+    records,
+    fps,
+    source: model.name,
+  };
+}
+
+function fmtNum(value) {
+  if (!Number.isFinite(value)) return "";
+  return String(+value.toFixed(6));
+}
+
+// ワイド CSV (1 行 = 1 フレーム × 1 人物、列 = 関節_x/_y/_z)
+function exportWideCsv(col) {
+  const header = ["frame", "timestamp_ms", "person"];
+  col.names.forEach((n) => header.push(`${n}_x`, `${n}_y`, `${n}_z`));
+  const lines = [header.join(",")];
+  col.records.forEach((rec) => {
+    rec.persons.forEach((p) => {
+      const row = [rec.frame, (rec.t * 1000).toFixed(3), p.id];
+      p.pts.forEach(([x, y, z], k) => {
+        if (p.ok[k]) row.push(fmtNum(x), fmtNum(y), fmtNum(z));
+        else row.push("", "", "");
+      });
+      lines.push(row.join(","));
+    });
+  });
+  return lines.join("\n") + "\n";
+}
+
+// ロング CSV (1 行 = 1 キーポイント)
+function exportLongCsv(col) {
+  const lines = [
+    "frame,timestamp_ms,person,keypoint_id,keypoint_name,x,y,z,visibility",
+  ];
+  col.records.forEach((rec) => {
+    rec.persons.forEach((p) => {
+      p.pts.forEach(([x, y, z], k) => {
+        lines.push([
+          rec.frame,
+          (rec.t * 1000).toFixed(3),
+          p.id,
+          k,
+          col.names[k],
+          p.ok[k] ? fmtNum(x) : "",
+          p.ok[k] ? fmtNum(y) : "",
+          p.ok[k] ? fmtNum(z) : "",
+          p.ok[k],
+        ].join(","));
+      });
+    });
+  });
+  return lines.join("\n") + "\n";
+}
+
+// poselab 形式 JSON (world_keypoints に座標を格納)
+function exportPoselabJson(col, coordinateNote) {
+  return JSON.stringify({
+    metadata: {
+      tool: "poselab-viewer export",
+      source: col.source,
+      coordinates: coordinateNote || "raw",
+      fps: col.fps,
+      keypoint_names: col.names,
+    },
+    frames: col.records.map((rec) => ({
+      frame: rec.frame,
+      timestamp_ms: +(rec.t * 1000).toFixed(3),
+      persons: rec.persons.map((p) => ({
+        person: p.id,
+        keypoints: [],
+        world_keypoints: p.pts.map(([x, y, z], k) => ({
+          id: k,
+          name: col.names[k],
+          x: +x.toFixed(6),
+          y: +y.toFixed(6),
+          z: +z.toFixed(6),
+          visibility: p.ok[k],
+        })),
+      })),
+    })),
+  });
+}
+
+// MMPose 互換 JSON (meta_info / instance_info、骨格リンクは選択関節で再構成)
+function exportMmposeJson(col, model) {
+  const remap = new Map(col.joints.map((j, k) => [j, k]));
+  const links = (model.edges || [])
+    .filter(([a, b]) => remap.has(a) && remap.has(b))
+    .map(([a, b]) => [remap.get(a), remap.get(b)]);
+  return JSON.stringify({
+    meta_info: {
+      dataset_name: "poselab-viewer export",
+      num_keypoints: col.names.length,
+      keypoint_id2name: Object.fromEntries(col.names.map((n, i) => [i, n])),
+      skeleton_links: links,
+    },
+    instance_info: col.records.map((rec) => ({
+      frame_id: rec.frame,
+      instances: rec.persons.map((p) => ({
+        keypoints: p.pts.map(([x, y, z]) => [
+          +x.toFixed(6), +y.toFixed(6), +z.toFixed(6),
+        ]),
+        keypoint_scores: p.ok.map(Number),
+      })),
+    })),
+  });
+}
+
+const EXPORT_FORMATS = {
+  "wide-csv": {
+    label: "ワイド CSV", ext: "csv", mime: "text/csv",
+    build: (col) => exportWideCsv(col),
+  },
+  "long-csv": {
+    label: "ロング CSV", ext: "csv", mime: "text/csv",
+    build: (col) => exportLongCsv(col),
+  },
+  "poselab-json": {
+    label: "poselab JSON", ext: "json", mime: "application/json",
+    build: (col, model, note) => exportPoselabJson(col, note),
+  },
+  "mmpose-json": {
+    label: "MMPose JSON", ext: "json", mime: "application/json",
+    build: (col, model) => exportMmposeJson(col, model),
+  },
+};
+
+/* ================================================================
    アプリ
    ================================================================ */
 
@@ -1130,6 +1303,7 @@ function applyModel(m) {
       else stage.visible.add(id);
       chip.classList.toggle("on", stage.visible.has(id));
       stage.dirty = true;
+      updateExportCount();
     });
     ui.personChips.appendChild(chip);
   });
@@ -1145,6 +1319,22 @@ function applyModel(m) {
   const wrist = findJoint(m.names, ["right_wrist", "left_wrist"]);
   ui.jointSelect.value = wrist >= 0 ? String(wrist) : "";
   stage.opts.highlight = wrist;
+
+  // エクスポートパネル
+  const exportJoints = $("export-joints");
+  exportJoints.innerHTML = "";
+  m.names.forEach((n, i) => {
+    const option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = `${i}: ${n}`;
+    option.selected = true;
+    exportJoints.appendChild(option);
+  });
+  $("export-start").value = "1";
+  $("export-start").max = String(m.frames.length);
+  $("export-end").value = String(m.frames.length);
+  $("export-end").max = String(m.frames.length);
+  updateExportCount();
 
   ui.frameSlider.max = String(m.frames.length - 1);
   setFrame(0);
@@ -1254,6 +1444,81 @@ $("opt-trail-len").addEventListener("input", (e) => {
 ui.jointSelect.addEventListener("change", () => {
   stage.opts.highlight = ui.jointSelect.value === "" ? -1 : Number(ui.jointSelect.value);
   stage.dirty = true;
+});
+
+/* ----- エクスポート ----- */
+
+function exportSelectionOptions() {
+  const personsMode = $("export-persons").value;
+  const persons = personsMode === "visible"
+    ? new Set([...stage.visible])
+    : new Set(model.personIds);
+  const joints = [...$("export-joints").selectedOptions].map((o) => Number(o.value));
+  const start = (Number($("export-start").value) || 1) - 1;
+  const end = (Number($("export-end").value) || model.frames.length) - 1;
+  return {
+    persons,
+    joints,
+    start,
+    end,
+    fps: Number(ui.fpsInput.value) || model.fps || 30,
+    applyView: $("export-transform").checked,
+  };
+}
+
+function updateExportCount() {
+  const badge = $("export-count");
+  if (!model) {
+    badge.textContent = "—";
+    return;
+  }
+  const o = exportSelectionOptions();
+  const last = model.frames.length - 1;
+  const frames = clamp(o.end, 0, last) - clamp(o.start, 0, last) + 1;
+  badge.textContent = `${Math.max(0, frames)}f × ${o.persons.size}人 × ${o.joints.length}関節`;
+}
+
+["export-format", "export-persons", "export-start", "export-end", "export-joints"]
+  .forEach((id) => $(id).addEventListener("change", updateExportCount));
+$("export-joints-all").addEventListener("click", () => {
+  [...$("export-joints").options].forEach((o) => { o.selected = true; });
+  updateExportCount();
+});
+$("export-joints-none").addEventListener("click", () => {
+  [...$("export-joints").options].forEach((o) => { o.selected = false; });
+  updateExportCount();
+});
+$("btn-export").addEventListener("click", () => {
+  if (!model) {
+    toast("先にデータを読み込んでください", true);
+    return;
+  }
+  const o = exportSelectionOptions();
+  if (!o.joints.length) {
+    toast("関節が選択されていません (「全選択」で戻せます)", true);
+    return;
+  }
+  if (!o.persons.size) {
+    toast("人物が選択されていません", true);
+    return;
+  }
+  const spec = EXPORT_FORMATS[$("export-format").value];
+  const col = collectExport(model, {
+    ...o,
+    points: o.applyView ? (frame) => stage.framePoints(frame) : null,
+  });
+  const note = o.applyView ? `display (axis=${stage.opts.axis}, y-up)` : "raw";
+  const text = spec.build(col, model, note);
+  const base = (model.name || "pose")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^\w\-一-龠ぁ-んァ-ヶ]+/g, "_") || "pose";
+  const blob = new Blob([text], { type: `${spec.mime};charset=utf-8` });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${base}_export.${spec.ext}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(`${spec.label} を書き出しました (${col.records.length} フレーム × ${col.names.length} 関節)`);
 });
 
 ui.btnPlay.addEventListener("click", () => setPlaying(!playing));
