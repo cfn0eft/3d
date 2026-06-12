@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # PyPI 配布名 (import 名は poselab のまま)。"poselab" は PyPI で取得済みのため
 name = "poselab-toolkit"
-version = "0.2.0"
+version = "0.3.0"
 description = "Human pose estimation toolkit for research: image / video / camera input, GUI & CLI, coordinate export"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -50,6 +50,10 @@ Issues = "https://github.com/cfn0eft/3d/issues"
 poselab = "poselab.cli:main"
 poselab-gui = "poselab.gui:main"
 poselab-plot = "poselab.plots:main"
+poselab-viewer = "poselab.webviewer:main"
 
 [tool.setuptools.packages.find]
 include = ["poselab*"]
+
+[tool.setuptools.package-data]
+poselab = ["webviewer/static/*"]
