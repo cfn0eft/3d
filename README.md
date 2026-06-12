@@ -65,6 +65,10 @@ Windows (64bit Python 3.9–3.12) でも動作します。
 # 動画を処理して座標 CSV と骨格描画済み動画を出力
 poselab --input walk.mp4 --csv walk.csv --save-video walk_annotated.mp4
 
+# ワンコマンド一括出力: <動画名>_poselab/ フォルダに全形式
+# (座標 long/wide CSV・JSON・角度・サマリ・H.264 注釈動画) を出力。複数動画可
+poselab --input walk.mp4 run.mp4 --auto-output
+
 # 静止画 (複数指定可)
 poselab --input a.jpg b.jpg --json poses.json
 
@@ -107,7 +111,9 @@ poselab --info
 | `--model {lite,full,heavy}` | モデルサイズ (lite=高速 / heavy=高精度) |
 | `--num-poses N` | 最大検出人数 (2 以上で ID トラッキングが自動有効) |
 | `--no-track` | 人物 ID トラッキングを無効化 |
-| `--csv` / `--json` / `--npz` | 座標データの出力先 |
+| `--csv` / `--wide-csv` / `--json` / `--npz` | 座標データの出力先 (ロング / ワイド形式) |
+| `--auto-output` | `<入力名>_poselab/` へ全形式を一括出力 (複数入力可) |
+| `--h264` | 注釈動画を H.264 に再エンコード (ブラウザ再生可、要 ffmpeg) |
 | `--angles-csv` | 関節角度 (10 関節) の時系列 CSV |
 | `--velocity-csv` | キーポイント速度 (px/s と m/s) の時系列 CSV |
 | `--distance A:B --distance-csv` | 2 点間距離の時系列 CSV (複数ペア可) |
@@ -176,6 +182,11 @@ df = pd.read_csv("walk.csv")
 wrist = df[df.keypoint_name == "right_wrist"]
 ```
 
+### ワイド CSV (`--wide-csv`、1 行 = 1 フレーム × 1 人物)
+
+キーポイントごとに `{名前}_x / _y / _z / _visibility / _world_x / _world_y /
+_world_z` の列を持つ形式です。Excel や MATLAB でそのまま扱えます。
+
 ### 関節角度 CSV (`--angles-csv`)
 
 肘・肩・股関節・膝・足首 (左右計 10 関節) について、3 点のなす角を
@@ -229,6 +240,9 @@ poselab-plot coords.csv --kind heatmap -k nose
 poselab-plot angles.csv
 poselab-plot velocity.csv -k right_wrist
 poselab-plot dist.csv
+
+# 3D 骨格ビュー (ワールド座標、--show でマウス回転できるウィンドウ表示)
+poselab-plot coords.csv --kind pose3d --frame 75 --show
 ```
 
 ## シーンタグ付け (行動コーディング)
