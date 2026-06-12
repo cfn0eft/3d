@@ -74,3 +74,72 @@ def landmark_side(name: str) -> str:
     if name.startswith("right_") or name.endswith("_right"):
         return "right"
     return "center"
+
+
+# ---------------------------------------------------------------------------
+# 追加の骨格カタログ (MMPose バックエンド用)
+#
+# COCO 17 点 / Human3.6M 17 点の並び順と接続関係は、各データセットの
+# 公開仕様 (事実情報) に基づき独自に記述したものです。
+# ---------------------------------------------------------------------------
+
+# COCO キーポイント (RTMPose など 2D モデルの標準出力)
+COCO17_NAMES: List[str] = [
+    "nose",
+    "left_eye",
+    "right_eye",
+    "left_ear",
+    "right_ear",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+]
+
+COCO17_EDGES: List[Tuple[int, int]] = [
+    # 顔まわり
+    (0, 1), (0, 2), (1, 3), (2, 4),
+    # 体幹
+    (5, 6), (5, 11), (6, 12), (11, 12),
+    # 腕
+    (5, 7), (7, 9), (6, 8), (8, 10),
+    # 脚
+    (11, 13), (13, 15), (12, 14), (14, 16),
+]
+
+# Human3.6M キーポイント (VideoPose3D など 3D リフタの標準出力)
+H36M17_NAMES: List[str] = [
+    "root",
+    "right_hip",
+    "right_knee",
+    "right_foot",
+    "left_hip",
+    "left_knee",
+    "left_foot",
+    "spine",
+    "thorax",
+    "neck_base",
+    "head",
+    "left_shoulder",
+    "left_elbow",
+    "left_wrist",
+    "right_shoulder",
+    "right_elbow",
+    "right_wrist",
+]
+
+H36M17_EDGES: List[Tuple[int, int]] = [
+    (0, 1), (1, 2), (2, 3),       # 右脚
+    (0, 4), (4, 5), (5, 6),       # 左脚
+    (0, 7), (7, 8), (8, 9), (9, 10),   # 体幹・頭
+    (8, 11), (11, 12), (12, 13),  # 左腕
+    (8, 14), (14, 15), (15, 16),  # 右腕
+]

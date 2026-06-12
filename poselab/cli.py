@@ -52,10 +52,38 @@ def build_parser() -> argparse.ArgumentParser:
 
     g_model = parser.add_argument_group("モデル設定")
     g_model.add_argument(
+        "--backend", choices=("mediapipe", "mmpose"), default="mediapipe",
+        help="推定バックエンド (mmpose はオプション依存。README 参照)",
+    )
+    g_model.add_argument(
         "--model", choices=MODEL_VARIANTS, default="full",
-        help="モデルサイズ (lite=高速, heavy=高精度)",
+        help="mediapipe のモデルサイズ (lite=高速, heavy=高精度)",
     )
     g_model.add_argument("--num-poses", type=int, default=1, help="最大検出人数")
+    g_model.add_argument(
+        "--device", default=None,
+        help="mmpose の実行デバイス (cuda:0 / cpu。省略時は自動選択)",
+    )
+    g_model.add_argument(
+        "--pose2d-model", default=None,
+        help="mmpose の 2D モデル (コンフィグ名/パス。既定: RTMPose-M COCO)",
+    )
+    g_model.add_argument("--pose2d-weights", default=None, help="2D チェックポイント")
+    g_model.add_argument(
+        "--det-model", default=None,
+        help="mmpose の人物検出モデル (既定: RTMDet-M 人物検出器)",
+    )
+    g_model.add_argument("--det-weights", default=None, help="検出チェックポイント")
+    g_model.add_argument(
+        "--pose3d", action="store_true",
+        help="3D リフティングを実行 (動画入力のみ、mmpose を使用。"
+             "--json は MMPose 互換 results JSON になり poselab-viewer で再生可)",
+    )
+    g_model.add_argument(
+        "--lift-model", default=None,
+        help="3D リフティングモデル (既定: VideoPose3D 243frm 教師あり)",
+    )
+    g_model.add_argument("--lift-weights", default=None, help="リフティングチェックポイント")
     g_model.add_argument(
         "--no-track", action="store_true",
         help="複数人検出時の人物 ID トラッキングを無効化",
@@ -164,6 +192,18 @@ def print_info() -> None:
         print("tkinter   : 利用可能 (GUI 起動可)")
     except ImportError:
         print("tkinter   : 見つかりません (GUI は利用不可)")
+    try:
+        import mmpose
+
+        try:
+            import torch
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            device = "不明"
+        print(f"mmpose    : {mmpose.__version__} (--backend mmpose 利用可, device={device})")
+    except ImportError:
+        print("mmpose    : 未導入 (--backend mmpose / --pose3d は利用不可。README 参照)")
     cache = default_cache_dir()
     print(f"モデルキャッシュ: {cache}")
     for variant in MODEL_VARIANTS:
@@ -180,8 +220,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list_keypoints:
-        for i, name in enumerate(LANDMARK_NAMES):
-            print(f"{i:2d}  {name}")
+        if args.backend == "mmpose":
+            from poselab.skeleton import COCO17_NAMES, H36M17_NAMES
+
+            print("# 2D (COCO 17 点)")
+            for i, name in enumerate(COCO17_NAMES):
+                print(f"{i:2d}  {name}")
+            print("# 3D リフティング (--pose3d, Human3.6M 17 点)")
+            for i, name in enumerate(H36M17_NAMES):
+                print(f"{i:2d}  {name}")
+        else:
+            for i, name in enumerate(LANDMARK_NAMES):
+                print(f"{i:2d}  {name}")
         return 0
     if args.info:
         print_info()
@@ -250,7 +300,125 @@ def _run_auto_output(parser: argparse.ArgumentParser, args) -> int:
     return 0
 
 
+def _run_pose3d_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
+    """--pose3d: 動画 1 本を 2D 推定 + 3D リフティングで処理する。"""
+    from poselab.sources import IMAGE_EXTENSIONS
+
+    if len(specs) != 1:
+        parser.error("--pose3d は動画 1 本ごとに実行してください")
+    spec = specs[0]
+    if str(spec).lower().startswith(("camera:", "cam:")):
+        parser.error("--pose3d はカメラ入力では使用できません")
+    video = Path(spec)
+    if video.suffix.lower() in IMAGE_EXTENSIONS:
+        parser.error("--pose3d は動画入力専用です")
+    if not video.exists():
+        parser.error(f"入力ファイルが見つかりません: {video}")
+    if args.show:
+        parser.error("--pose3d は --show に対応していません")
+    for value, name in (
+        (args.npz, "--npz"),
+        (args.velocity_csv, "--velocity-csv"),
+        (args.distance, "--distance"),
+    ):
+        if value:
+            parser.error(f"{name} は --pose3d では未対応です")
+    notes = []
+    if args.smooth and args.smooth > 1:
+        notes.append("--smooth は無視されます")
+    if args.max_frames:
+        notes.append("--max-frames は無視されます (全フレームを処理)")
+    if args.angles_csv:
+        notes.append("角度 CSV は出力されません")
+    if notes and not args.quiet:
+        for note in notes:
+            print(f"注意: --pose3d では {note}", file=sys.stderr)
+
+    from poselab.backends.mmpose_backend import DEFAULT_POSE2D
+    from poselab.exporters import WideCsvExporter
+    from poselab.pose3d import DEFAULT_LIFT, run_pose3d
+    from poselab.progress import ProgressReporter
+    from poselab.skeleton import H36M17_NAMES
+
+    exporters: List[Exporter] = []
+    if args.csv:
+        exporters.append(CsvExporter(args.csv))
+    if args.wide_csv:
+        exporters.append(WideCsvExporter(args.wide_csv, H36M17_NAMES))
+
+    reporter = ProgressReporter(total=None, enabled=not args.quiet)
+
+    def progress(done: int, total) -> None:
+        reporter.total = total
+        reporter.update(done)
+
+    lift_model = args.lift_model or DEFAULT_LIFT
+    pose2d_model = args.pose2d_model or DEFAULT_POSE2D
+    try:
+        results = run_pose3d(
+            video,
+            lift_model=lift_model,
+            lift_weights=args.lift_weights,
+            pose2d=pose2d_model,
+            pose2d_weights=args.pose2d_weights,
+            det_model=args.det_model,
+            det_weights=args.det_weights,
+            device=args.device,
+            json_path=args.json,
+            exporters=exporters,
+            save_video=args.save_video,
+            h264=args.h264,
+            progress=progress,
+            quiet=args.quiet,
+        )
+        reporter.finish()
+    except ImportError as exc:
+        print(f"エラー: {exc}", file=sys.stderr)
+        return 1
+
+    from poselab.analysis import summarize_results
+
+    summary = summarize_results(results)
+    if args.summary_json:
+        import json
+
+        metadata = {
+            "tool": f"poselab {__version__}",
+            "backend": "mmpose",
+            "model": pose2d_model,
+            "lift_model": lift_model,
+            "input": [str(video)],
+        }
+        with open(args.summary_json, "w", encoding="utf-8") as f:
+            json.dump({**metadata, **summary}, f, ensure_ascii=False, indent=2)
+
+    if not args.quiet:
+        print(
+            "完了: {total_frames} フレーム処理、"
+            "{detected_frames} フレームで人物を検出 (検出率 {rate:.1f}%)".format(
+                rate=summary["detection_rate"] * 100, **summary
+            ),
+            file=sys.stderr,
+        )
+        for label, path in (
+            ("CSV", args.csv), ("ワイドCSV", args.wide_csv),
+            ("3D JSON", args.json), ("サマリ", args.summary_json),
+            ("動画", args.save_video),
+        ):
+            if path:
+                print(f"  {label}: {path}", file=sys.stderr)
+        if args.json:
+            print(
+                "  ヒント: 3D JSON は poselab-viewer にドロップすると再生できます",
+                file=sys.stderr,
+            )
+    return 0
+
+
 def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
+    if args.pose3d:
+        return _run_pose3d_job(parser, args, specs)
+
     # 入力ソースの決定
     image_paths = [s for s in specs if Path(s).suffix.lower() in
                    {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}]
@@ -268,22 +436,38 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
         )
         is_static = isinstance(source, ImageSource)
 
-    # バックエンド (mediapipe の import は重いので必要時のみ)
+    # バックエンド (重い import は必要時のみ)
     from poselab.backends import create_backend
 
-    backend = create_backend(
-        "mediapipe",
-        model=args.model,
-        num_poses=args.num_poses,
-        min_detection_confidence=args.min_detection_confidence,
-        min_tracking_confidence=args.min_tracking_confidence,
-        static_image_mode=is_static,
-    )
+    if args.backend == "mmpose":
+        from poselab.backends.mmpose_backend import DEFAULT_POSE2D
+
+        model_label = args.pose2d_model or DEFAULT_POSE2D
+        backend = create_backend(
+            "mmpose",
+            pose2d=model_label,
+            pose2d_weights=args.pose2d_weights,
+            det_model=args.det_model,
+            det_weights=args.det_weights,
+            device=args.device,
+            num_poses=args.num_poses,
+        )
+    else:
+        model_label = args.model
+        backend = create_backend(
+            "mediapipe",
+            model=args.model,
+            num_poses=args.num_poses,
+            min_detection_confidence=args.min_detection_confidence,
+            min_tracking_confidence=args.min_tracking_confidence,
+            static_image_mode=is_static,
+        )
+    keypoint_names = list(backend.keypoint_names)
 
     metadata = {
         "tool": f"poselab {__version__}",
         "backend": backend.name,
-        "model": args.model,
+        "model": model_label,
         "input": specs,
     }
     if args.smooth > 1:
@@ -296,11 +480,11 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
         if args.wide_csv:
             from poselab.exporters import WideCsvExporter
 
-            exporters.append(WideCsvExporter(args.wide_csv, LANDMARK_NAMES))
+            exporters.append(WideCsvExporter(args.wide_csv, keypoint_names))
         if args.json:
-            exporters.append(JsonExporter(args.json, LANDMARK_NAMES, metadata))
+            exporters.append(JsonExporter(args.json, keypoint_names, metadata))
         if args.npz:
-            exporters.append(NpzExporter(args.npz, LANDMARK_NAMES, args.num_poses))
+            exporters.append(NpzExporter(args.npz, keypoint_names, args.num_poses))
         if args.angles_csv:
             from poselab.analysis import AngleCsvExporter
 
