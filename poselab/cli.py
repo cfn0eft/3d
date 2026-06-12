@@ -45,6 +45,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--info", action="store_true",
         help="環境情報 (バージョン・モデルキャッシュ等) を表示して終了",
     )
+    parser.add_argument(
+        "--list-cameras", action="store_true",
+        help="利用可能なカメラを検索して表示して終了",
+    )
 
     g_model = parser.add_argument_group("モデル設定")
     g_model.add_argument(
@@ -159,6 +163,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
     if args.info:
         print_info()
+        return 0
+    if args.list_cameras:
+        from poselab.sources import scan_cameras
+
+        print("カメラを検索中... (数秒かかります)", file=sys.stderr)
+        cameras = scan_cameras()
+        if not cameras:
+            print("利用可能なカメラが見つかりませんでした。")
+            print("接続と OS のカメラアクセス許可を確認してください。")
+            return 1
+        for cam in cameras:
+            print(
+                f"カメラ {cam['index']}: 利用可能 "
+                f"({cam['width']}x{cam['height']}) "
+                f"→ poselab --input camera:{cam['index']} --show"
+            )
         return 0
 
     if not args.input:

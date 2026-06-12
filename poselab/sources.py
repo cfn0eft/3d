@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
 
@@ -104,9 +105,16 @@ class CameraSource(FrameSource):
         mirror: bool = False,
     ) -> None:
         self.mirror = mirror
-        self.cap = cv2.VideoCapture(index)
-        if not self.cap.isOpened():
-            raise IOError(f"failed to open camera index {index}")
+        self.cap = _open_camera(index)
+        if self.cap is None:
+            raise IOError(
+                f"カメラ {index} を開けませんでした。\n"
+                "・カメラが接続されているか\n"
+                "・他のアプリ (Zoom / Teams 等) が使用中でないか\n"
+                "・OS のカメラアクセス許可 (Windows: 設定 → プライバシー →\n"
+                "  カメラ → デスクトップアプリにカメラへのアクセスを許可)\n"
+                "を確認し、別のカメラ番号 (1, 2, ...) も試してください。"
+            )
         if width:
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         if height:
@@ -131,6 +139,45 @@ class CameraSource(FrameSource):
 
     def close(self) -> None:
         self.cap.release()
+
+
+def _open_camera(index: int) -> Optional[cv2.VideoCapture]:
+    """カメラを開く。Windows では MSMF 失敗時に DirectShow で再試行する。"""
+    cap = cv2.VideoCapture(index)
+    if cap.isOpened():
+        return cap
+    cap.release()
+    if sys.platform == "win32":
+        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        if cap.isOpened():
+            return cap
+        cap.release()
+    return None
+
+
+def scan_cameras(max_index: int = 8) -> List[dict]:
+    """利用可能なカメラを検索する。
+
+    Returns
+    -------
+    list of dict: {"index", "width", "height"} (開けたカメラのみ)
+    """
+    found = []
+    for index in range(max_index + 1):
+        cap = _open_camera(index)
+        if cap is None:
+            continue
+        ok, frame = cap.read()
+        if ok and frame is not None:
+            found.append(
+                {
+                    "index": index,
+                    "width": frame.shape[1],
+                    "height": frame.shape[0],
+                }
+            )
+        cap.release()
+    return found
 
 
 def open_source(
