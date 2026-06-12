@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "poselab"
+version = "0.1.0"
+description = "Human pose estimation toolkit for research: image / video / camera input, GUI & CLI, coordinate export"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "poselab developers" }]
+dependencies = [
+    "mediapipe>=0.10.14",
+    "opencv-python>=4.8",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+]
+
+[project.scripts]
+poselab = "poselab.cli:main"
+poselab-gui = "poselab.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["poselab*"]
