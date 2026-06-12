@@ -53,6 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_model.add_argument("--num-poses", type=int, default=1, help="最大検出人数")
     g_model.add_argument(
+        "--no-track", action="store_true",
+        help="複数人検出時の人物 ID トラッキングを無効化",
+    )
+    g_model.add_argument(
         "--min-detection-confidence", type=float, default=0.5,
         help="検出の信頼度しきい値",
     )
@@ -237,6 +241,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     def progress(done: int, total: Optional[int]) -> None:
         reporter.update(done)
 
+    tracker = None
+    if args.num_poses > 1 and not args.no_track and not is_static:
+        from poselab.tracking import PersonTracker
+
+        tracker = PersonTracker()
+
     trajectory = None
     if args.trail > 0:
         from poselab.visualize import TrajectoryOverlay
@@ -258,6 +268,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             draw=not args.no_draw,
             draw_labels=args.draw_labels,
             trajectory=trajectory,
+            tracker=tracker,
+            draw_ids=args.num_poses > 1,
             min_visibility=args.min_visibility,
             show=args.show,
             max_frames=args.max_frames,

@@ -499,6 +499,11 @@ class PoseLabApp:
         draw = self.draw_var.get()
         draw_labels = self.labels_var.get()
         trajectory = self._make_trajectory()
+        tracker = None
+        if num_poses > 1 and not static:
+            from poselab.tracking import PersonTracker
+
+            tracker = PersonTracker()
 
         def work() -> None:
             try:
@@ -554,6 +559,8 @@ class PoseLabApp:
                         draw=draw,
                         draw_labels=draw_labels,
                         trajectory=trajectory,
+                        tracker=tracker,
+                        draw_ids=num_poses > 1,
                         on_frame=on_frame,
                     )
                 finally:
@@ -660,8 +667,9 @@ class PoseLabApp:
             return
         from poselab.analysis import compute_person_angles
 
-        angles = compute_person_angles(result.persons[0])
-        lines = []
+        person = result.persons[0]
+        angles = compute_person_angles(person)
+        lines = [f"[P{person.person_index}]"] if len(result.persons) > 1 else []
         for name, (deg, vis, _) in angles.items():
             value = f"{deg:6.1f}" if not np.isnan(deg) else "   ---"
             mark = "" if vis >= 0.5 else " ?"
@@ -723,8 +731,9 @@ class PoseLabApp:
             )
         if fmt == "npz":
             max_persons = max(
-                (len(r.persons) for r in self._recorded), default=1
-            ) or 1
+                (p.person_index + 1 for r in self._recorded for p in r.persons),
+                default=1,
+            )
             return NpzExporter(path, LANDMARK_NAMES, max_persons)
         if fmt == "angles":
             from poselab.analysis import AngleCsvExporter
@@ -804,6 +813,11 @@ class PoseLabApp:
         det_conf = self.det_conf.get()
         draw_labels = self.labels_var.get()
         trajectory = self._make_trajectory()
+        tracker = None
+        if num_poses > 1:
+            from poselab.tracking import PersonTracker
+
+            tracker = PersonTracker()
 
         def work() -> None:
             try:
@@ -852,7 +866,8 @@ class PoseLabApp:
                     run_pipeline(
                         source, backend, exporters=exporters,
                         video_writer=writer, draw_labels=draw_labels,
-                        trajectory=trajectory, progress=progress,
+                        trajectory=trajectory, tracker=tracker,
+                        draw_ids=num_poses > 1, progress=progress,
                     )
                 finally:
                     backend.close()

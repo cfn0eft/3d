@@ -60,8 +60,9 @@ poselab --input photo.jpg --save-image annotated.jpg --csv photo.csv
 # カメラ 0 番をライブプレビューしながら座標を記録 (q キーで終了)
 poselab --input camera:0 --show --csv live.csv
 
-# 高精度モデル・3 人まで検出・NumPy 出力
-poselab --input dance.mp4 --model heavy --num-poses 3 --npz dance.npz
+# 複数人検出 (3 人まで)。ID トラッキング + P0/P1... バッジ描画は自動で有効
+poselab --input dance.mp4 --model heavy --num-poses 3 --npz dance.npz \
+        --csv dance.csv --save-video dance_tracked.mp4
 
 # 関節角度 (肘・肩・股・膝・足首) の時系列 CSV + 5 フレーム移動平均で平滑化
 poselab --input squat.mp4 --angles-csv angles.csv --csv coords.csv --smooth 5
@@ -90,7 +91,8 @@ poselab --info
 | --- | --- |
 | `--input` | 画像/動画パス、または `camera:0` 形式のカメラ指定 |
 | `--model {lite,full,heavy}` | モデルサイズ (lite=高速 / heavy=高精度) |
-| `--num-poses N` | 最大検出人数 |
+| `--num-poses N` | 最大検出人数 (2 以上で ID トラッキングが自動有効) |
+| `--no-track` | 人物 ID トラッキングを無効化 |
 | `--csv` / `--json` / `--npz` | 座標データの出力先 |
 | `--angles-csv` | 関節角度 (10 関節) の時系列 CSV |
 | `--velocity-csv` | キーポイント速度 (px/s と m/s) の時系列 CSV |
@@ -239,8 +241,11 @@ pytest tests/
 - 推定値にはノイズが含まれるため、解析前に `visibility` でのフィルタや
   平滑化を検討してください (`--smooth N` で NaN 対応の移動平均を適用
   できます。より高度な平滑化が必要なら Savitzky–Golay フィルタ等を)
-- 複数人検出時の `person` インデックスはフレーム間で同一人物を保証
-  しません (トラッキング ID ではありません)。`--smooth` も同一
-  インデックス = 同一人物の前提で動作します
+- 複数人検出時 (`--num-poses` 2 以上) は、重心の最近傍マッチングによる
+  人物 ID トラッキングが自動で有効になり、CSV / JSON / NPZ の `person`
+  列はフレーム間で安定した ID になります (映像上にも P0 / P1... の
+  バッジを描画)。人物同士がすれ違う・長時間隠れるケースでは ID が
+  入れ替わる可能性があるため、厳密な解析では確認を推奨します
+  (`--no-track` で無効化可能)
 - カメラのミラー表示 (`--camera-mirror`) 使用時は、キーポイントの
   left/right が被写体の実際の左右と逆になります

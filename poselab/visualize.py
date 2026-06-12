@@ -77,12 +77,46 @@ def draw_person(
             )
 
 
+# 人物 ID バッジの配色 (BGR、ID でローテーション)
+ID_PALETTE = [
+    (90, 200, 255),   # amber
+    (255, 160, 90),   # blue
+    (140, 230, 140),  # green
+    (230, 130, 230),  # magenta
+    (90, 220, 220),   # yellow-green
+    (200, 140, 255),  # pink
+    (255, 220, 120),  # cyan
+    (150, 150, 250),  # red-ish
+]
+
+
+def draw_person_id(frame: np.ndarray, person: PersonPose) -> None:
+    """人物 ID バッジ (P0, P1, ...) を頭部付近に描画する。"""
+    anchor = None
+    for kp in person.keypoints:  # nose が先頭なので頭部優先で探す
+        if kp.visibility >= 0.5:
+            anchor = kp
+            break
+    if anchor is None:
+        return
+    label = f"P{person.person_index}"
+    color = ID_PALETTE[person.person_index % len(ID_PALETTE)]
+    x, y = int(anchor.x_px), int(anchor.y_px) - 18
+    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+    cv2.rectangle(frame, (x - 4, y - th - 6), (x + tw + 4, y + 4), color, -1)
+    cv2.putText(
+        frame, label, (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+        0.6, (20, 20, 20), 2, cv2.LINE_AA,
+    )
+
+
 def draw_result(
     frame: np.ndarray,
     result: FrameResult,
     skeleton: Sequence[Tuple[int, int]],
     min_visibility: float = 0.3,
     draw_labels: bool = False,
+    draw_ids: bool = False,
 ) -> np.ndarray:
     """フレーム結果全体 (複数人) を描画して frame を返す。"""
     for person in result.persons:
@@ -90,6 +124,8 @@ def draw_result(
             frame, person, skeleton,
             min_visibility=min_visibility, draw_labels=draw_labels,
         )
+        if draw_ids:
+            draw_person_id(frame, person)
     return frame
 
 

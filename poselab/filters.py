@@ -47,11 +47,11 @@ def smooth_results(
         return results
 
     n = len(results)
-    max_persons = max((len(r.persons) for r in results), default=0)
-    if max_persons == 0:
+    person_ids = sorted({p.person_index for r in results for p in r.persons})
+    if not person_ids:
         return results
 
-    for pi in range(max_persons):
+    for pi in person_ids:
         px = np.full((n, NUM_LANDMARKS, 3), np.nan)
         world = np.full((n, NUM_LANDMARKS, 3), np.nan)
         for fi, result in enumerate(results):
