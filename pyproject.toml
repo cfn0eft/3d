@@ -10,7 +10,7 @@ description = "Human pose estimation toolkit for research: image / video / camer
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "poselab developers" }]
+authors = [{ name = "cfn0eft (Daiki Morofuji)" }]
 keywords = [
     "pose-estimation",
     "skeleton",
