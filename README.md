@@ -57,8 +57,18 @@ poselab --input dance.mp4 --model heavy --num-poses 3 --npz dance.npz
 # 関節角度 (肘・肩・股・膝・足首) の時系列 CSV + 5 フレーム移動平均で平滑化
 poselab --input squat.mp4 --angles-csv angles.csv --csv coords.csv --smooth 5
 
-# キーポイント名一覧
+# キーポイント速度 (px/s, m/s) と処理サマリ (検出率等) も出力
+poselab --input run.mp4 --velocity-csv vel.csv --summary-json summary.json
+
+# キーポイント名一覧 / 環境診断
 poselab --list-keypoints
+poselab --info
+```
+
+処理中はプログレスバー (%, fps, 残り時間) が表示されます:
+
+```
+[##############----------]  60.0%  18/30  15.9 fps  残り 0:01
 ```
 
 主なオプション:
@@ -70,7 +80,10 @@ poselab --list-keypoints
 | `--num-poses N` | 最大検出人数 |
 | `--csv` / `--json` / `--npz` | 座標データの出力先 |
 | `--angles-csv` | 関節角度 (10 関節) の時系列 CSV |
+| `--velocity-csv` | キーポイント速度 (px/s と m/s) の時系列 CSV |
+| `--summary-json` | 処理サマリ (検出率・平均人数等) の JSON |
 | `--smooth N` | N フレーム移動平均による座標の平滑化 |
+| `--info` | 環境診断 (バージョン・モデルキャッシュ状況) |
 | `--save-video` / `--save-image` | 骨格描画済みメディアの出力先 |
 | `--show` | プレビューウィンドウ表示 |
 | `--draw-labels` | キーポイント名も描画 |
@@ -84,13 +97,20 @@ poselab-gui
 ```
 
 - **入力**: 画像・動画ファイルを開く、またはカメラ番号を指定して開始
-  (ミラー表示の切り替え可)
-- **ライブプレビュー**: 骨格オーバーレイ・FPS 表示付き。一時停止 / 再開、
+  (ミラー表示の切り替え可)。ショートカット: Ctrl+I (画像) / Ctrl+O (動画)
+- **ライブプレビュー**: 骨格オーバーレイ・FPS・再生位置 (% と時刻、
+  カメラは LIVE 経過時間) を表示。Space で一時停止 / 再開、Esc で停止、
   表示中フレームの画像保存も可能
+- **関節角度のライブ表示**: 10 関節の角度をリアルタイムでパネル表示
+  (信頼度の低い値には ? マーク)
 - **記録**: 「座標を記録する」を有効にすると推定結果が蓄積され、
-  CSV / JSON / NPZ / 関節角度 CSV にエクスポートできます
-- **一括処理**: 動画ファイルを選ぶと、座標 (CSV + JSON) と
-  骨格描画済み動画 (MP4) を進捗バー付きで一括生成します
+  CSV / JSON / NPZ / 関節角度 / 速度にエクスポートできます。
+  Ctrl+S で全 5 形式を一括保存。エクスポート時の移動平均平滑化にも対応
+- **一括処理**: 動画ファイルを選ぶと、座標 (CSV + JSON) ・関節角度 CSV ・
+  骨格描画済み動画 (MP4) を進捗 % と残り時間の表示付きで一括生成します
+- **状況表示**: 処理終了時に検出率 (%) のサマリを表示
+- **設定の保存**: モデル・しきい値などの設定は終了時に自動保存され、
+  次回起動時に復元されます
 
 ## 出力フォーマット
 
@@ -121,6 +141,18 @@ wrist = df[df.keypoint_name == "right_wrist"]
 度単位で出力します。ワールド座標 (3D) がある場合はそれを優先し
 (`coordinates=world`)、なければピクセル座標 (2D) で計算します。
 列: `frame, timestamp_ms, person, angle_name, angle_deg, min_visibility, coordinates`
+
+### 速度 CSV (`--velocity-csv`)
+
+前フレームとの差分から各キーポイントの速度を計算します。
+ピクセル座標系の `vx_px_per_s` / `vy_px_per_s` / `speed_px_per_s` と、
+ワールド座標系の `speed_m_per_s` (m/s) を出力します。
+検出が途切れた直後のフレームは行を生成しません。
+
+### サマリ JSON (`--summary-json`)
+
+`total_frames` / `detected_frames` / `detection_rate` / `max_persons` /
+`mean_persons` / `mean_visibility` / `duration_s` などの品質指標です。
 
 ### JSON
 

@@ -41,6 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-keypoints", action="store_true",
         help="キーポイント名一覧を表示して終了",
     )
+    parser.add_argument(
+        "--info", action="store_true",
+        help="環境情報 (バージョン・モデルキャッシュ等) を表示して終了",
+    )
 
     g_model = parser.add_argument_group("モデル設定")
     g_model.add_argument(
@@ -64,6 +68,14 @@ def build_parser() -> argparse.ArgumentParser:
     g_out.add_argument(
         "--angles-csv", type=Path,
         help="関節角度 (肘・肩・股・膝・足首) を CSV で出力",
+    )
+    g_out.add_argument(
+        "--velocity-csv", type=Path,
+        help="キーポイント速度 (px/s, m/s) を CSV で出力",
+    )
+    g_out.add_argument(
+        "--summary-json", type=Path,
+        help="処理サマリ (検出率等) を JSON で出力",
     )
     g_out.add_argument(
         "--smooth", type=int, default=0, metavar="N",
@@ -93,6 +105,38 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def print_info() -> None:
+    """環境診断情報を表示する。"""
+    import platform
+
+    import cv2
+    import mediapipe
+    import numpy
+
+    from poselab.models import MODEL_VARIANTS, default_cache_dir
+
+    print(f"poselab   : {__version__}")
+    print(f"Python    : {platform.python_version()} ({platform.platform()})")
+    print(f"mediapipe : {mediapipe.__version__}")
+    print(f"OpenCV    : {cv2.__version__}")
+    print(f"NumPy     : {numpy.__version__}")
+    try:
+        import tkinter  # noqa: F401
+
+        print("tkinter   : 利用可能 (GUI 起動可)")
+    except ImportError:
+        print("tkinter   : 見つかりません (GUI は利用不可)")
+    cache = default_cache_dir()
+    print(f"モデルキャッシュ: {cache}")
+    for variant in MODEL_VARIANTS:
+        path = cache / f"pose_landmarker_{variant}.task"
+        if path.exists():
+            size_mb = path.stat().st_size / 1e6
+            print(f"  {variant:5s}: ダウンロード済み ({size_mb:.1f} MB)")
+        else:
+            print(f"  {variant:5s}: 未取得 (初回使用時に自動ダウンロード)")
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -100,6 +144,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.list_keypoints:
         for i, name in enumerate(LANDMARK_NAMES):
             print(f"{i:2d}  {name}")
+        return 0
+    if args.info:
+        print_info()
         return 0
 
     if not args.input:
@@ -156,6 +203,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             from poselab.analysis import AngleCsvExporter
 
             exporters.append(AngleCsvExporter(args.angles_csv))
+        if args.velocity_csv:
+            from poselab.analysis import VelocityCsvExporter
+
+            exporters.append(VelocityCsvExporter(args.velocity_csv))
         return exporters
 
     # 平滑化は全フレームを見てから行うため、有効時は後段でまとめて出力する
@@ -168,13 +219,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.save_image and not is_static:
         parser.error("--save-image は静止画入力でのみ使用できます")
 
+    from poselab.progress import ProgressReporter
+
+    reporter = ProgressReporter(
+        total=args.max_frames or source.frame_count,
+        enabled=not args.quiet,
+    )
+
     def progress(done: int, total: Optional[int]) -> None:
-        if args.quiet:
-            return
-        if total:
-            print(f"\r処理中 {done}/{total} フレーム", end="", file=sys.stderr)
-        elif done % 30 == 0:
-            print(f"\r処理中 {done} フレーム", end="", file=sys.stderr)
+        reporter.update(done)
 
     try:
         results = run_pipeline(
@@ -192,6 +245,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
     finally:
         backend.close()
+        reporter.finish()
 
     if not streaming:
         from poselab.exporters import export_results
@@ -200,16 +254,29 @@ def main(argv: Optional[List[str]] = None) -> int:
         results = smooth_results(results, args.smooth)
         export_results(results, build_exporters())
 
+    from poselab.analysis import summarize_results
+
+    summary = summarize_results(results)
+    if args.summary_json:
+        import json
+
+        with open(args.summary_json, "w", encoding="utf-8") as f:
+            json.dump(
+                {**metadata, **summary}, f, ensure_ascii=False, indent=2
+            )
+
     if not args.quiet:
-        print(file=sys.stderr)
-        n_detected = sum(1 for r in results if r.persons)
         print(
-            f"完了: {len(results)} フレーム処理、{n_detected} フレームで人物を検出",
+            "完了: {total_frames} フレーム処理、"
+            "{detected_frames} フレームで人物を検出 (検出率 {rate:.1f}%)".format(
+                rate=summary["detection_rate"] * 100, **summary
+            ),
             file=sys.stderr,
         )
         for label, path in (
             ("CSV", args.csv), ("JSON", args.json), ("NPZ", args.npz),
-            ("角度CSV", args.angles_csv),
+            ("角度CSV", args.angles_csv), ("速度CSV", args.velocity_csv),
+            ("サマリ", args.summary_json),
             ("動画", args.save_video), ("画像", args.save_image),
         ):
             if path:
