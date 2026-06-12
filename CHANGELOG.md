@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 (2026-06-12)
+
+### 追加
+- MMPose バックエンド (`--backend mmpose`、オプション依存):
+  RTMDet 人物検出 + RTMPose 2D 推定 (COCO 17 点)。既存の CSV / JSON /
+  NPZ 出力・トラッキング・描画・GUI 外の全 CLI 機能がそのまま使える。
+  モデルの重みは MMPose 公式 model zoo から初回使用時に自動ダウンロード
+- 3D リフティング (`--pose3d`、動画入力): 2D 推定 + VideoPose3D 系
+  時系列リフティングで Human3.6M 17 点の 3D 骨格を推定
+  - MMPose 互換 results JSON (`meta_info` / `instance_info`) を出力。
+    Pose3DStudio の出力と互換で、`poselab-viewer` でそのまま再生可能
+  - ロング / ワイド CSV (world_x/y/z に 3D 座標)、2D+3D 可視化動画
+    (`--save-video`、`--h264` 対応)、`--auto-output` 併用に対応
+  - `--pose2d-model` / `--lift-model` / `--det-model` 等でモデル差し替え、
+    `--device` でデバイス指定
+- COCO 17 点 / Human3.6M 17 点の骨格カタログを追加 (`poselab.skeleton`)
+- `poselab --info` に mmpose の導入状況と実行デバイスを表示
+- ビューアに座標系「Z 上向き (MMPose 3D)」を追加。MMPose 形式 JSON の
+  読み込み時は自動で選択される
+
 ## 0.3.0 (2026-06-12)
 
 ### 追加
