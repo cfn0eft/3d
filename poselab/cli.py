@@ -53,6 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_model.add_argument("--num-poses", type=int, default=1, help="最大検出人数")
     g_model.add_argument(
+        "--no-track", action="store_true",
+        help="複数人検出時の人物 ID トラッキングを無効化",
+    )
+    g_model.add_argument(
         "--min-detection-confidence", type=float, default=0.5,
         help="検出の信頼度しきい値",
     )
@@ -237,6 +241,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     def progress(done: int, total: Optional[int]) -> None:
         reporter.update(done)
 
+    tracker = None
+    if args.num_poses > 1 and not args.no_track and not is_static:
+        from poselab.tracking import PersonTracker
+
+        tracker = PersonTracker()
+
     trajectory = None
     if args.trail > 0:
         from poselab.visualize import TrajectoryOverlay
@@ -258,6 +268,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             draw=not args.no_draw,
             draw_labels=args.draw_labels,
             trajectory=trajectory,
+            tracker=tracker,
+            draw_ids=args.num_poses > 1,
             min_visibility=args.min_visibility,
             show=args.show,
             max_frames=args.max_frames,
@@ -277,6 +289,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     from poselab.analysis import summarize_results
 
     summary = summarize_results(results)
+    id_warnings = tracker.get_warnings() if tracker is not None else []
+    if id_warnings:
+        from poselab.tracking import format_warning
+
+        summary["id_warnings"] = id_warnings
+        if not args.quiet:
+            print(
+                "⚠ 人物 ID が入れ替わっている可能性のある区間があります:",
+                file=sys.stderr,
+            )
+            for w in id_warnings:
+                print("  - " + format_warning(w), file=sys.stderr)
+            print(
+                "  座標データを解析する際は該当区間の前後で ID を確認してください。",
+                file=sys.stderr,
+            )
     if args.summary_json:
         import json
 

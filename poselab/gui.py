@@ -499,6 +499,11 @@ class PoseLabApp:
         draw = self.draw_var.get()
         draw_labels = self.labels_var.get()
         trajectory = self._make_trajectory()
+        tracker = None
+        if num_poses > 1 and not static:
+            from poselab.tracking import PersonTracker
+
+            tracker = PersonTracker()
 
         def work() -> None:
             try:
@@ -554,10 +559,15 @@ class PoseLabApp:
                         draw=draw,
                         draw_labels=draw_labels,
                         trajectory=trajectory,
+                        tracker=tracker,
+                        draw_ids=num_poses > 1,
                         on_frame=on_frame,
                     )
                 finally:
                     backend.close()
+                counts["id_warnings"] = (
+                    tracker.get_warnings() if tracker is not None else []
+                )
                 self._frame_queue.put(("done", counts, None))
             except Exception:
                 self._frame_queue.put(("error", traceback.format_exc(), None))
@@ -585,6 +595,8 @@ class PoseLabApp:
                         )
                     else:
                         self.status.set("処理終了")
+                    if payload and payload.get("id_warnings"):
+                        self._show_id_warnings(payload["id_warnings"])
                 elif kind == "progress":
                     self.progress["value"] = payload["pct"]
                     eta = payload.get("eta_s")
@@ -599,9 +611,11 @@ class PoseLabApp:
                     self.progress["value"] = 100
                     self.batch_label.config(text="100% 完了")
                     self.status.set(
-                        f"一括処理が完了しました: {payload}.csv / .json / "
+                        f"一括処理が完了しました: {payload['base']}.csv / .json / "
                         f"_angles.csv / .mp4"
                     )
+                    if payload.get("id_warnings"):
+                        self._show_id_warnings(payload["id_warnings"])
                 elif kind == "error":
                     self.rec_indicator.config(text="")
                     self.status.set("エラーが発生しました (詳細はコンソール)")
@@ -654,14 +668,32 @@ class PoseLabApp:
         )
         self._update_angle_panel(result)
 
+    def _show_id_warnings(self, warnings: list) -> None:
+        """人物 ID 入れ替わりリスクの警告ダイアログを表示する。"""
+        from tkinter import messagebox
+
+        from poselab.tracking import format_warning
+
+        shown = warnings[:8]
+        lines = [format_warning(w) for w in shown]
+        if len(warnings) > len(shown):
+            lines.append(f"... 他 {len(warnings) - len(shown)} 件")
+        messagebox.showwarning(
+            "人物 ID 入れ替わりの可能性",
+            "以下の区間で人物 ID が入れ替わっている可能性があります。\n"
+            "座標データを解析する際は前後の ID を確認してください。\n\n"
+            + "\n".join(lines),
+        )
+
     def _update_angle_panel(self, result: FrameResult) -> None:
         if not result.persons:
             self.angle_label.config(text="(未検出)")
             return
         from poselab.analysis import compute_person_angles
 
-        angles = compute_person_angles(result.persons[0])
-        lines = []
+        person = result.persons[0]
+        angles = compute_person_angles(person)
+        lines = [f"[P{person.person_index}]"] if len(result.persons) > 1 else []
         for name, (deg, vis, _) in angles.items():
             value = f"{deg:6.1f}" if not np.isnan(deg) else "   ---"
             mark = "" if vis >= 0.5 else " ?"
@@ -723,8 +755,9 @@ class PoseLabApp:
             )
         if fmt == "npz":
             max_persons = max(
-                (len(r.persons) for r in self._recorded), default=1
-            ) or 1
+                (p.person_index + 1 for r in self._recorded for p in r.persons),
+                default=1,
+            )
             return NpzExporter(path, LANDMARK_NAMES, max_persons)
         if fmt == "angles":
             from poselab.analysis import AngleCsvExporter
@@ -804,6 +837,11 @@ class PoseLabApp:
         det_conf = self.det_conf.get()
         draw_labels = self.labels_var.get()
         trajectory = self._make_trajectory()
+        tracker = None
+        if num_poses > 1:
+            from poselab.tracking import PersonTracker
+
+            tracker = PersonTracker()
 
         def work() -> None:
             try:
@@ -852,11 +890,24 @@ class PoseLabApp:
                     run_pipeline(
                         source, backend, exporters=exporters,
                         video_writer=writer, draw_labels=draw_labels,
-                        trajectory=trajectory, progress=progress,
+                        trajectory=trajectory, tracker=tracker,
+                        draw_ids=num_poses > 1, progress=progress,
                     )
                 finally:
                     backend.close()
-                self._frame_queue.put(("batch_done", str(base_path), None))
+                self._frame_queue.put(
+                    (
+                        "batch_done",
+                        {
+                            "base": str(base_path),
+                            "id_warnings": (
+                                tracker.get_warnings()
+                                if tracker is not None else []
+                            ),
+                        },
+                        None,
+                    )
+                )
             except Exception:
                 self._frame_queue.put(("error", traceback.format_exc(), None))
 

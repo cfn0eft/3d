@@ -13,6 +13,7 @@ from poselab.backends.base import PoseBackend
 from poselab.exporters import Exporter
 from poselab.imgio import imwrite
 from poselab.sources import FrameSource
+from poselab.tracking import PersonTracker
 from poselab.types import FrameResult
 from poselab.visualize import TrajectoryOverlay, draw_result, draw_status
 
@@ -48,6 +49,8 @@ def run_pipeline(
     draw: bool = True,
     draw_labels: bool = False,
     trajectory: Optional[TrajectoryOverlay] = None,
+    tracker: Optional[PersonTracker] = None,
+    draw_ids: Optional[bool] = None,
     min_visibility: float = 0.3,
     show: bool = False,
     max_frames: Optional[int] = None,
@@ -60,6 +63,8 @@ def run_pipeline(
     戻り値はエクスポータを使わない場合のための全フレーム結果。
     show=True のときは OpenCV ウィンドウでプレビューし、q で終了。
     """
+    if draw_ids is None:
+        draw_ids = tracker is not None
     results: List[FrameResult] = []
     fps_t0 = time.monotonic()
     fps_count = 0
@@ -71,6 +76,12 @@ def run_pipeline(
                 break
             persons = backend.process(frame, timestamp_ms)
             h, w = frame.shape[:2]
+            if tracker is not None:
+                persons = tracker.assign(
+                    persons, w, h,
+                    frame=frame, frame_index=frame_index,
+                    timestamp_ms=timestamp_ms,
+                )
             result = FrameResult(
                 frame_index=frame_index,
                 timestamp_ms=timestamp_ms,
@@ -91,6 +102,7 @@ def run_pipeline(
                 annotated = draw_result(
                     annotated, result, backend.skeleton,
                     min_visibility=min_visibility, draw_labels=draw_labels,
+                    draw_ids=draw_ids,
                 )
 
             fps_count += 1

@@ -182,7 +182,10 @@ class NpzExporter(Exporter):
         n = len(self.names)
         kp_arr = np.full((self.max_persons, n, 5), np.nan, dtype=np.float32)
         w_arr = np.full((self.max_persons, n, 4), np.nan, dtype=np.float32)
-        for p in result.persons[: self.max_persons]:
+        for p in result.persons:
+            # トラッキング ID が枠を超えた人物は記録しない (CSV/JSON には残る)
+            if p.person_index >= self.max_persons:
+                continue
             for kp in p.keypoints:
                 kp_arr[p.person_index, kp.index] = (
                     kp.x_px,
