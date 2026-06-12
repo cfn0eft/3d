@@ -110,6 +110,7 @@ poselab --info
 | `--csv` / `--json` / `--npz` | 座標データの出力先 |
 | `--angles-csv` | 関節角度 (10 関節) の時系列 CSV |
 | `--velocity-csv` | キーポイント速度 (px/s と m/s) の時系列 CSV |
+| `--distance A:B --distance-csv` | 2 点間距離の時系列 CSV (複数ペア可) |
 | `--summary-json` | 処理サマリ (検出率・平均人数等) の JSON |
 | `--smooth N` | N フレーム移動平均による座標の平滑化 |
 | `--info` | 環境診断 (バージョン・モデルキャッシュ状況) |
@@ -211,6 +212,31 @@ import numpy as np
 data = np.load("dance.npz")
 right_wrist_xy = data["keypoints"][:, 0, 16, :2]  # 16 = right_wrist
 ```
+
+## グラフ生成 (poselab-plot)
+
+出力した CSV から、コーディングなしでグラフ画像を生成できます
+(`pip install "poselab-toolkit[plot]"` または `pip install matplotlib`)。
+CSV の種類 (座標 / 角度 / 速度 / 距離) はヘッダから自動判別されます。
+
+```bash
+# 手首の座標時系列 / 軌跡プロット / 滞在ヒートマップ
+poselab-plot coords.csv -k right_wrist,left_wrist
+poselab-plot coords.csv --kind trajectory -k right_wrist
+poselab-plot coords.csv --kind heatmap -k nose
+
+# 関節角度・速度・距離の時系列グラフ
+poselab-plot angles.csv
+poselab-plot velocity.csv -k right_wrist
+poselab-plot dist.csv
+```
+
+## シーンタグ付け (行動コーディング)
+
+GUI の「シーンタグ」タブで、再生中の映像にラベル付きの時間区間を
+記録できます (T キーで開始 / 終了)。記録した区間は
+`label, start_ms, end_ms, duration_s` 形式の CSV に保存でき、
+座標 CSV の `timestamp_ms` と突き合わせて区間ごとの解析ができます。
 
 ## Python API
 

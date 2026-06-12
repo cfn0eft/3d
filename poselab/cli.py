@@ -82,6 +82,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="キーポイント速度 (px/s, m/s) を CSV で出力",
     )
     g_out.add_argument(
+        "--distance", action="append", metavar="A:B",
+        help="2 点間距離を計算するペア (例: right_wrist:nose、複数指定可)",
+    )
+    g_out.add_argument(
+        "--distance-csv", type=Path,
+        help="--distance で指定した距離の出力先 CSV",
+    )
+    g_out.add_argument(
         "--summary-json", type=Path,
         help="処理サマリ (検出率等) を JSON で出力",
     )
@@ -239,6 +247,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             from poselab.analysis import VelocityCsvExporter
 
             exporters.append(VelocityCsvExporter(args.velocity_csv))
+        if args.distance:
+            from poselab.features import DistanceCsvExporter, parse_pair
+
+            if not args.distance_csv:
+                parser.error("--distance を使う場合は --distance-csv も指定してください")
+            try:
+                pairs = [parse_pair(spec) for spec in args.distance]
+            except ValueError as exc:
+                parser.error(str(exc))
+            exporters.append(DistanceCsvExporter(args.distance_csv, pairs))
         return exporters
 
     # 平滑化は全フレームを見てから行うため、有効時は後段でまとめて出力する
@@ -344,7 +362,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         for label, path in (
             ("CSV", args.csv), ("JSON", args.json), ("NPZ", args.npz),
             ("角度CSV", args.angles_csv), ("速度CSV", args.velocity_csv),
-            ("サマリ", args.summary_json),
+            ("距離CSV", args.distance_csv), ("サマリ", args.summary_json),
             ("動画", args.save_video), ("画像", args.save_image),
         ):
             if path:
