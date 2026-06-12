@@ -55,3 +55,52 @@ def test_pose3d_rejects_unsupported_outputs(tmp_path, capsys):
     with pytest.raises(SystemExit):
         main(["--input", str(video), "--pose3d", "--npz", str(tmp_path / "o.npz")])
     assert "--npz" in capsys.readouterr().err
+
+
+def test_parse_outputs():
+    import pytest
+
+    from poselab.cli import AUTO_OUTPUT_FORMATS, parse_outputs
+
+    parser = build_parser()
+    assert parse_outputs(None, parser) == set(AUTO_OUTPUT_FORMATS)
+    assert parse_outputs("json,wide", parser) == {"json", "wide"}
+    assert parse_outputs(" json , long ", parser) == {"json", "long"}
+    with pytest.raises(SystemExit):
+        parse_outputs("json,bogus", parser)
+    with pytest.raises(SystemExit):
+        parse_outputs(" , ", parser)
+
+
+def test_auto_output_paths_selection(tmp_path):
+    from poselab.cli import auto_output_paths
+
+    video = tmp_path / "walk.mp4"
+    paths = auto_output_paths(video, {"json", "wide"}, is_image=False)
+    assert paths["out_dir"].name == "walk_poselab"
+    assert paths["json"].name == "walk.json"
+    assert paths["wide_csv"].name == "walk_wide.csv"
+    assert paths["csv"] is None
+    assert paths["angles_csv"] is None
+    assert paths["summary_json"] is None
+    assert paths["save_video"] is None
+
+    paths = auto_output_paths(video, {"video"}, is_image=False)
+    assert paths["save_video"].name == "walk_annotated.mp4"
+    assert paths["json"] is None
+
+    image = tmp_path / "p.jpg"
+    paths = auto_output_paths(image, {"video"}, is_image=True)
+    assert paths["save_video"] is None and paths["save_image"] is None
+    paths = auto_output_paths(image, {"image"}, is_image=True)
+    assert paths["save_image"].name == "p_annotated.png"
+
+
+def test_outputs_requires_auto_output(tmp_path, capsys):
+    import pytest
+
+    video = tmp_path / "c.mp4"
+    video.write_bytes(b"x")
+    with pytest.raises(SystemExit):
+        main(["--input", str(video), "--outputs", "json"])
+    assert "--auto-output" in capsys.readouterr().err
