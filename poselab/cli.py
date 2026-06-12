@@ -289,6 +289,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     from poselab.analysis import summarize_results
 
     summary = summarize_results(results)
+    id_warnings = tracker.get_warnings() if tracker is not None else []
+    if id_warnings:
+        from poselab.tracking import format_warning
+
+        summary["id_warnings"] = id_warnings
+        if not args.quiet:
+            print(
+                "⚠ 人物 ID が入れ替わっている可能性のある区間があります:",
+                file=sys.stderr,
+            )
+            for w in id_warnings:
+                print("  - " + format_warning(w), file=sys.stderr)
+            print(
+                "  座標データを解析する際は該当区間の前後で ID を確認してください。",
+                file=sys.stderr,
+            )
     if args.summary_json:
         import json
 

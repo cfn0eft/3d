@@ -77,7 +77,11 @@ def run_pipeline(
             persons = backend.process(frame, timestamp_ms)
             h, w = frame.shape[:2]
             if tracker is not None:
-                persons = tracker.assign(persons, w, h)
+                persons = tracker.assign(
+                    persons, w, h,
+                    frame=frame, frame_index=frame_index,
+                    timestamp_ms=timestamp_ms,
+                )
             result = FrameResult(
                 frame_index=frame_index,
                 timestamp_ms=timestamp_ms,
