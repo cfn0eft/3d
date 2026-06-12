@@ -51,9 +51,10 @@ poselab = "poselab.cli:main"
 poselab-gui = "poselab.gui:main"
 poselab-plot = "poselab.plots:main"
 poselab-viewer = "poselab.webviewer:main"
+poselab-studio = "poselab.studio:main"
 
 [tool.setuptools.packages.find]
 include = ["poselab*"]
 
 [tool.setuptools.package-data]
-poselab = ["webviewer/static/*"]
+poselab = ["webviewer/static/*", "studio/gui/*"]

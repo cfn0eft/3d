@@ -368,6 +368,22 @@ backend.close()
 バックエンドは `poselab.backends.base.PoseBackend` を継承することで
 他の推定エンジンにも差し替えられる設計です。
 
+## 開発・Pose3DStudio GUI
+
+開発の全体像・引き継ぎ情報は [CLAUDE.md](CLAUDE.md) と
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) にまとまっています。
+
+デスクトップ版 Pose3DStudio の Web GUI もこのリポジトリがソースです
+(`poselab/studio/gui/`)。ビルドと配備:
+
+```bash
+poselab-studio build --out dist/studio-gui      # ビルドのみ
+poselab-studio deploy <exe>/_internal/gui       # exe へ配備 (画面で F5)
+```
+
+3D 描画エンジンはビューア (`poselab/webviewer/static/app.js`) と共通で、
+`poselab-studio` がビルド時に連結します。
+
 ## テスト
 
 ```bash

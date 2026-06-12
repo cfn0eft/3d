@@ -14,6 +14,11 @@
 - `--auto-output --outputs LIST`: 一括出力の形式をカンマ区切りで選択
   (`long, wide, json, angles, summary, video, image`。既定: すべて)。
   `--pose3d` との併用にも対応
+- `poselab-studio`: デスクトップ版 Pose3DStudio の Web GUI ソースを
+  リポジトリに収容 (`poselab/studio/gui/`)。`build` で 3D エンジン
+  (ビューアと共通) と連結して生成、`deploy` で exe の `_internal/gui`
+  へ配備 (既存ファイルは `.backup/` へ退避)
+- 開発引き継ぎドキュメントを追加 (`CLAUDE.md`、`docs/DEVELOPMENT.md`)
 
 ## 0.4.0 (2026-06-12)
 
