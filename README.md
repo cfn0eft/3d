@@ -2,7 +2,8 @@
 
 画像・動画・カメラ入力からヒトの骨格 (33 キーポイント) を推定し、
 座標データを CSV / JSON / NumPy 形式でエクスポートできるツールです。
-GUI と CLI の両方から使用できます。
+GUI と CLI の両方から使用でき、結果はブラウザ 3D ビューア
+([poselab-viewer](#ブラウザ-3d-ビューア-poselab-viewer)) で再生できます。
 
 ![GUI スクリーンショット](docs/images/gui_screenshot.png)
 
@@ -244,6 +245,44 @@ poselab-plot dist.csv
 # 3D 骨格ビュー (ワールド座標、--show でマウス回転できるウィンドウ表示)
 poselab-plot coords.csv --kind pose3d --frame 75 --show
 ```
+
+## ブラウザ 3D ビューア (poselab-viewer)
+
+推定結果をブラウザ上でインタラクティブに 3D 再生できるビューアです。
+依存ライブラリゼロ (標準ライブラリ + Canvas 2D) で、オフラインでも
+動作します。
+
+```bash
+# 起動してブラウザを開く (ファイルはドラッグ & ドロップでも読める)
+poselab-viewer
+
+# 結果ファイルを渡して起動 (フォルダ指定で中の JSON / CSV 全部)
+poselab-viewer run_poselab/run_coords.json
+poselab-viewer run_poselab/
+
+# CSS/JS を埋め込んだ自己完結 HTML を書き出す (共有・静的ホスティング用)
+poselab-viewer --export-html viewer.html
+```
+
+読み込める形式:
+
+| 形式 | 例 |
+| --- | --- |
+| poselab JSON | `--json` / `--auto-output` の `*_coords.json` |
+| poselab CSV (ロング / ワイド) | `--csv` / `--wide-csv` の出力 |
+| MMPose 系 JSON (`meta_info` / `instance_info`) | Pose3DStudio など 3D パイプラインの `results_*.json` |
+| 汎用ワイド CSV (`名前_x/_y/_z` 列) | 他ツールの 3D 座標 CSV |
+
+操作: ドラッグで回転、ホイールでズーム、Shift+ドラッグで移動、
+Space で再生/停止、←→ でコマ送り、F フィット、G グリッド、
+L ラベル、1/2/3 で正面/側面/上面。人物ごとの表示切替、注目関節の
+ハイライトと軌跡 (トレイル)、再生速度・FPS 変更、PNG 保存、
+腰位置センタリング・体格スケール正規化に対応しています。
+
+「デモ」ボタン (または `?demo=1`) で合成歩行データを再生できるので、
+手元に結果ファイルがなくても動作を確認できます。GitHub Pages 上の
+ホスト版は <https://cfn0eft.github.io/3d/> から使えます
+(データはブラウザ内で処理され、どこにも送信されません)。
 
 ## シーンタグ付け (行動コーディング)
 

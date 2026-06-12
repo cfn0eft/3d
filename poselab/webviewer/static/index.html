@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>poselab 3D Viewer</title>
+    <meta name="description" content="ヒト骨格推定の結果 (JSON / CSV) をブラウザで 3D 再生・回転・ズームできるビューア" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='1' stop-color='%23a78bfa'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%230b101a'/%3E%3Cg stroke='url(%23g)' stroke-width='4' stroke-linecap='round' fill='none'%3E%3Ccircle cx='32' cy='15' r='6'/%3E%3Cpath d='M32 22v16M32 26l-11 7M32 26l11 7M32 38l-8 13M32 38l8 13'/%3E%3C/g%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+      <div class="bg-grid"></div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="brand-g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#22d3ee" />
+              <stop offset="1" stop-color="#a78bfa" />
+            </linearGradient>
+          </defs>
+          <g stroke="url(#brand-g)" stroke-width="4.5" stroke-linecap="round" fill="none">
+            <circle cx="32" cy="14" r="6.5" />
+            <path d="M32 22v16M32 26l-12 8M32 26l12 8M32 38l-9 14M32 38l9 14" />
+          </g>
+        </svg>
+        <div class="brand-text">
+          <strong>poselab</strong>
+          <span>3D Viewer</span>
+        </div>
+        <span class="brand-tag" id="brand-tag">offline ok</span>
+      </div>
+      <nav class="topbar-actions">
+        <button id="btn-demo" class="btn ghost" title="合成データのデモを再生">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-2 14.5v-9l7 4.5Z"/></svg>
+          <span>デモ</span>
+        </button>
+        <button id="btn-open" class="btn ghost" title="JSON / CSV を開く">
+          <svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8L9.6 3.6A2 2 0 0 0 8.2 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          <span>開く</span>
+        </button>
+        <button id="btn-snapshot" class="btn ghost" title="現在のフレームを PNG 保存">
+          <svg viewBox="0 0 24 24"><path d="M12 17a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-8 4h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3l-1.4-2.1A2 2 0 0 0 13.9 3h-3.8a2 2 0 0 0-1.7.9L7 6H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2Z"/></svg>
+          <span>PNG</span>
+        </button>
+        <a class="btn ghost gh-link" href="https://github.com/cfn0eft/3d" target="_blank" rel="noreferrer" title="GitHub リポジトリ">
+          <svg viewBox="0 0 24 24"><path d="M12 .8a11.2 11.2 0 0 0-3.5 21.8c.5.1.7-.2.7-.5v-2c-3.1.7-3.8-1.3-3.8-1.3a3 3 0 0 0-1.2-1.7c-1-.7.1-.7.1-.7a2.4 2.4 0 0 1 1.7 1.2 2.4 2.4 0 0 0 3.3 1 2.4 2.4 0 0 1 .7-1.5c-2.5-.3-5.1-1.3-5.1-5.6a4.4 4.4 0 0 1 1.2-3 4 4 0 0 1 .1-3s.9-.3 3.1 1.1a10.7 10.7 0 0 1 5.6 0c2.2-1.4 3.1-1.1 3.1-1.1a4 4 0 0 1 .1 3 4.4 4.4 0 0 1 1.2 3c0 4.3-2.6 5.3-5.1 5.6a2.7 2.7 0 0 1 .8 2.1v3.1c0 .3.2.6.7.5A11.2 11.2 0 0 0 12 .8Z"/></svg>
+        </a>
+      </nav>
+      <input id="file-input" type="file" multiple accept=".json,.csv,application/json,text/csv" hidden />
+    </header>
+
+    <main class="layout">
+      <section class="stage" id="stage">
+        <canvas id="stage-canvas"></canvas>
+
+        <div class="hud hud-views">
+          <button class="chip" data-view="front" title="正面 (1)">正面</button>
+          <button class="chip" data-view="side" title="側面 (2)">側面</button>
+          <button class="chip" data-view="top" title="上面 (3)">上面</button>
+          <button class="chip" id="btn-fit" title="全体が収まる位置へ (F)">フィット</button>
+          <button class="chip" id="btn-reset-view" title="視点リセット (R)">リセット</button>
+        </div>
+
+        <div class="hud hud-sidebar-toggle">
+          <button class="chip" id="btn-sidebar" title="設定パネルの表示切替">設定</button>
+        </div>
+
+        <div class="hud hud-help" id="hud-help">
+          ドラッグ 回転 · ホイール ズーム · Shift+ドラッグ 移動 · Space 再生 · ←/→ コマ送り
+        </div>
+
+        <div class="empty" id="empty-state">
+          <svg class="empty-mark" viewBox="0 0 64 64" aria-hidden="true">
+            <g stroke="url(#brand-g)" stroke-width="3.5" stroke-linecap="round" fill="none">
+              <circle cx="32" cy="14" r="6.5" />
+              <path d="M32 22v16M32 26l-12 8M32 26l12 8M32 38l-9 14M32 38l9 14" />
+            </g>
+          </svg>
+          <h1>結果ファイルをドロップ</h1>
+          <p>
+            poselab の JSON / CSV、または MMPose 系 3D パイプライン
+            (Pose3DStudio など) の JSON / CSV をそのまま読み込めます。
+          </p>
+          <div class="empty-actions">
+            <button id="btn-open-2" class="btn primary">ファイルを開く</button>
+            <button id="btn-demo-2" class="btn ghost">デモを再生</button>
+          </div>
+          <ul class="empty-formats">
+            <li>poselab JSON (<code>metadata / frames</code>)</li>
+            <li>poselab CSV (ロング / ワイド)</li>
+            <li>MMPose JSON (<code>meta_info / instance_info</code>)</li>
+            <li>汎用ワイド CSV (<code>名前_x/_y/_z</code> 列)</li>
+          </ul>
+        </div>
+
+        <div class="drop-overlay" id="drop-overlay">
+          <div class="drop-box">ここにドロップして読み込み</div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+      </section>
+
+      <aside class="sidebar" id="sidebar">
+        <section class="card" id="card-data">
+          <header class="card-head">
+            <h2>データ</h2>
+            <span class="badge" id="format-badge">未読込</span>
+          </header>
+          <div class="file-name" id="file-name">—</div>
+          <dl class="stats">
+            <div><dt>フレーム</dt><dd id="stat-frames">0</dd></div>
+            <div><dt>人物</dt><dd id="stat-persons">0</dd></div>
+            <div><dt>関節</dt><dd id="stat-joints">0</dd></div>
+            <div><dt>長さ</dt><dd id="stat-duration">—</dd></div>
+          </dl>
+        </section>
+
+        <section class="card">
+          <header class="card-head"><h2>表示</h2></header>
+          <label class="row select-row">
+            <span>座標系</span>
+            <select id="axis-select">
+              <option value="ydown" selected>Y 下向き (カメラ系)</option>
+              <option value="yup">Y 上向き (そのまま)</option>
+            </select>
+          </label>
+          <label class="row switch-row">
+            <span>腰を原点に固定</span>
+            <input type="checkbox" id="opt-center" checked /><i></i>
+          </label>
+          <label class="row switch-row">
+            <span>体格スケール正規化</span>
+            <input type="checkbox" id="opt-normalize" /><i></i>
+          </label>
+          <label class="row switch-row">
+            <span>床グリッド</span>
+            <input type="checkbox" id="opt-grid" checked /><i></i>
+          </label>
+          <label class="row switch-row">
+            <span>関節ラベル</span>
+            <input type="checkbox" id="opt-labels" /><i></i>
+          </label>
+          <label class="row slider-row">
+            <span>ボーン太さ</span>
+            <input type="range" id="opt-bone" min="1" max="8" step="0.5" value="3.5" />
+          </label>
+        </section>
+
+        <section class="card">
+          <header class="card-head"><h2>人物</h2></header>
+          <div class="chips" id="person-chips"></div>
+        </section>
+
+        <section class="card">
+          <header class="card-head"><h2>注目関節</h2></header>
+          <label class="row select-row">
+            <span>ハイライト</span>
+            <select id="joint-select"><option value="">なし</option></select>
+          </label>
+          <label class="row switch-row">
+            <span>軌跡 (トレイル)</span>
+            <input type="checkbox" id="opt-trail" checked /><i></i>
+          </label>
+          <label class="row slider-row">
+            <span>軌跡の長さ</span>
+            <input type="range" id="opt-trail-len" min="10" max="240" step="10" value="90" />
+          </label>
+        </section>
+
+        <section class="card card-hint">
+          <p>
+            <strong>poselab</strong> での出力例:<br />
+            <code>poselab input.mp4 --auto-output</code><br />
+            生成された <code>*_coords.json</code> をここへドロップ。
+          </p>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="timeline">
+      <button class="btn play" id="btn-play" title="再生 / 一時停止 (Space)">
+        <svg id="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7Z"/></svg>
+        <svg id="icon-pause" viewBox="0 0 24 24" hidden><path d="M7 5h4v14H7Zm6 0h4v14h-4Z"/></svg>
+      </button>
+      <div class="scrub">
+        <input type="range" id="frame-slider" min="0" max="0" value="0" step="1" />
+      </div>
+      <span class="frame-label mono" id="frame-label">0 / 0</span>
+      <label class="speed mono">
+        <select id="speed-select">
+          <option value="0.25">×0.25</option>
+          <option value="0.5">×0.5</option>
+          <option value="1" selected>×1.0</option>
+          <option value="1.5">×1.5</option>
+          <option value="2">×2.0</option>
+        </select>
+      </label>
+      <label class="fps mono">
+        FPS
+        <input type="number" id="fps-input" min="1" max="240" step="1" value="30" />
+      </label>
+      <button class="btn ghost loop on" id="btn-loop" title="ループ再生">ループ</button>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
