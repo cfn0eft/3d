@@ -8,8 +8,8 @@ Pose3DStudio.exe は `_internal/gui/` の index.html / app.css / app.js を
 リポジトリ内のソースからビルドし、exe のフォルダへ配備します。
 
 ソース構成 (このリポジトリが唯一のソース):
-- 3D エンジン  : poselab/webviewer/static/app.js の「アプリ」マーカー
-                 より前の部分 (ビューアと共通。二重管理しない)
+- 3D エンジン  : poselab/webviewer/static/engine.js
+                 (ビューアと共通。二重管理しない)
 - GUI 本体     : poselab/studio/gui/app_main.js
 - HTML / CSS   : poselab/studio/gui/index.html, app.css
 
@@ -32,16 +32,12 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 GUI_DIR = Path(__file__).resolve().parent / "gui"
-ENGINE_SOURCE = Path(__file__).resolve().parents[1] / "webviewer" / "static" / "app.js"
-
-# webviewer/static/app.js 内の「エンジン部分の終わり」を示すマーカー
-ENGINE_END_MARKER = (
-    "/* ================================================================\n"
-    "   アプリ"
+ENGINE_SOURCE = (
+    Path(__file__).resolve().parents[1] / "webviewer" / "static" / "engine.js"
 )
 
-_IIFE_HEADER = """/* PoseLab 3D viewer engine — poselab/webviewer/static/app.js のエンジン部分を
-   poselab-studio build で切り出したもの (スケルトン定義 / パーサ /
+_IIFE_HEADER = """/* PoseLab 3D viewer engine — poselab/webviewer/static/engine.js を
+   poselab-studio build で連結したもの (スケルトン定義 / パーサ /
    PoseStage レンダラ / エクスポート)。window.PoseLab3D として公開。
    ※ 自動生成ファイル: 編集はリポジトリ側で行うこと */
 (() => {
@@ -59,22 +55,15 @@ window.PoseLab3D = {
 DEPLOY_FILES = ("index.html", "app.css", "app.js")
 
 
-def extract_engine() -> str:
-    """webviewer の app.js からエンジン部分を取り出す。"""
-    source = ENGINE_SOURCE.read_text(encoding="utf-8")
-    index = source.find(ENGINE_END_MARKER)
-    if index < 0:
-        raise RuntimeError(
-            "エンジンマーカーが見つかりません: "
-            f"{ENGINE_SOURCE} に「アプリ」セクション見出しが必要です"
-        )
-    return source[:index]
+def read_engine() -> str:
+    """ビューアと共通の 3D エンジン (engine.js) のソースを読み込む。"""
+    return ENGINE_SOURCE.read_text(encoding="utf-8")
 
 
 def build_app_js() -> str:
     """エンジン + GUI 本体を連結した app.js を生成する。"""
     app_main = (GUI_DIR / "app_main.js").read_text(encoding="utf-8")
-    return _IIFE_HEADER + extract_engine() + _IIFE_FOOTER + app_main
+    return _IIFE_HEADER + read_engine() + _IIFE_FOOTER + app_main
 
 
 def build(out_dir: "str | Path") -> Path:

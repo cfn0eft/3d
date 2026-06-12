@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.1 (2026-06-12)
+
+### 変更 (内部構成の再編。機能・出力は変わらない)
+- 3D エンジンを `poselab/webviewer/static/engine.js` に物理分割し、
+  コメントマーカーによる切り出し (`ENGINE_END_MARKER`) を廃止
+  - ビューアは engine.js + app.js (UI 配線) の 2 ファイル構成に。
+    ローカル配信・GitHub Pages・`--export-html` (従来どおり 1 ファイルに
+    埋め込み) すべて対応済み
+  - `poselab-studio build` は engine.js をそのまま IIFE で包んで連結
+    (exe へ配備する app.js は従来どおり 1 ファイル)
+- 3D エンジンの Node スモークテストを追加 (`tests/engine_smoke.mjs` /
+  `tests/test_engine_js.py`): デモ生成 → 全 4 形式エクスポート →
+  再パースのラウンドトリップと MMPose 形式の最小例パースを検証
+  (node が無い環境ではスキップ)
+- パッケージ版数を `poselab/__init__.py` の `__version__` に単一ソース化
+  (pyproject.toml は dynamic version で参照)
+
 ## 0.5.0 (2026-06-13)
 
 ### 追加

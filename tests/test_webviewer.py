@@ -1,6 +1,8 @@
 """poselab.webviewer (ブラウザ 3D ビューア) のテスト。
 
-ブラウザ側 (app.js) の描画はテスト対象外。Python 側のサーバー /
+ブラウザ側の描画 (PoseStage / app.js の UI 配線) はテスト対象外。
+エンジンのパース / エクスポートは tests/test_engine_js.py の
+Node スモークテストで検証する。ここでは Python 側のサーバー /
 自己完結 HTML 生成 / ファイル収集をテストする。
 """
 
@@ -23,7 +25,7 @@ from poselab.webviewer import (
 
 
 def test_static_assets_exist():
-    for name in ("index.html", "app.css", "app.js"):
+    for name in ("index.html", "app.css", "engine.js", "app.js"):
         path = STATIC_DIR / name
         assert path.is_file(), name
         assert path.stat().st_size > 1000, name
@@ -33,13 +35,17 @@ def test_build_single_html_inlines_assets():
     html = build_single_html()
     # 外部参照が消えてインライン化されている
     assert './app.css' not in html
+    assert './engine.js' not in html
     assert './app.js' not in html
     assert "<style>" in html
     assert "<script>" in html
-    # 主要な実装が含まれている
+    # 主要な実装が含まれている (engine.js 由来 + app.js 由来)
     assert "PoseStage" in html
     assert "meta_info" in html  # MMPose 形式対応
     assert "keypoint_name" in html  # poselab ロング CSV 対応
+    assert "stage-canvas" in html  # アプリ配線 (app.js)
+    # エンジン → アプリの読み込み順が保たれている
+    assert html.index("class PoseStage") < html.index('new PoseStage($("stage-canvas"))')
 
 
 def test_collect_data_files(tmp_path):
@@ -80,6 +86,10 @@ def test_server_serves_index_and_assets(viewer_server):
     assert status == 200
     assert b"poselab" in body
     assert "text/html" in ctype
+
+    status, body, ctype = _get(viewer_server + "/engine.js")
+    assert status == 200
+    assert "javascript" in ctype
 
     status, body, ctype = _get(viewer_server + "/app.js")
     assert status == 200

@@ -14,7 +14,8 @@
 │   ├ cli.py           poselab コマンド (--auto-output --outputs)  │
 │   ├ gui.py           Tkinter GUI (poselab-gui)                   │
 │   ├ webviewer/       ブラウザ 3D ビューア (poselab-viewer)       │
-│   │   └ static/app.js  ★3D エンジンの唯一のソース★              │
+│   │   ├ static/engine.js ★3D エンジンの唯一のソース★            │
+│   │   └ static/app.js    ビューアの UI 配線                      │
 │   └ studio/          Pose3DStudio.exe の GUI ソースとビルダー    │
 │       ├ gui/         index.html / app.css / app_main.js          │
 │       └ __init__.py  poselab-studio build/deploy                 │
@@ -37,29 +38,30 @@
   - v0.4.0: 推定エンジン (`--backend mmpose`、`--pose3d` 3D リフティング)
   - v0.5.0: エクスポートの個別選択 (ビューアのパネル + `--outputs`)、
     exe GUI ソースの本リポジトリへの収容 (`poselab/studio/`)
+  - v0.5.1: エンジンを engine.js に物理分割 (マーカー切り出しを廃止)、
+    Node スモークテスト追加、バージョンの単一ソース化
 - exe 自体は残っているが、GUI は本リポジトリからビルド・配備する。
   将来的には PyInstaller ビルドを CI 化して exe 自体をリポジトリから
   生成するのがロードマップの最終形
 
 ## 3D エンジンの単一ソース運用
 
-`poselab/webviewer/static/app.js` は次の構成:
+3D エンジン (骨格カタログ / パーサ parseAny / デモ生成 / PoseStage
+レンダラ / エクスポート関数群) は
+**`poselab/webviewer/static/engine.js` が唯一のソース**:
 
-```
-スケルトンカタログ → パーサ (parseAny) → デモ生成 → PoseStage レンダラ
-→ エクスポート関数群 →  ←★ここまでエンジン★
-/* ====…
-   アプリ            ←★この見出しがマーカー (ENGINE_END_MARKER)★
-   ====… */
-ビューアの UI 配線 (DOM 依存)
-```
-
-- ビューアはこのファイルをそのまま使う
-- Pose3DStudio GUI は `poselab-studio build` がマーカーより前を切り出し、
-  IIFE (`window.PoseLab3D`) で包んで `studio/gui/app_main.js` と連結する
+- **ビューア**: index.html が `engine.js` → `app.js` (UI 配線、DOM 依存)
+  の順に読み込む。`--export-html` は両方を 1 つの HTML に埋め込む
+- **Pose3DStudio GUI**: `poselab-studio build` が engine.js を IIFE
+  (`window.PoseLab3D`) で包み、`studio/gui/app_main.js` と連結して
+  exe 用の単一 app.js を生成する (exe 側の固定ルート制約のため 1 ファイル)
 - つまり**エンジンのバグ修正・機能追加は 1 か所**。変更後は
   `poselab-studio deploy` で exe にも配る (`tests/test_studio.py` が
-  マーカー存在と連結構造を守っている)
+  連結構造を守っている)
+- パーサ / エクスポートは DOM 非依存の純関数なので、Node スモークテスト
+  (`tests/engine_smoke.mjs`、pytest の `tests/test_engine_js.py` から自動
+  実行) が「デモ生成 → 全形式エクスポート → 再パース」のラウンドトリップを
+  CI で検証する。PoseStage の描画だけは実ブラウザで確認する
 
 ## Pose3DStudio.exe の技術メモ (ユーザー環境)
 
@@ -102,6 +104,7 @@ poselab --info    # mmpose の検出状況を確認
 | 対象 | 方法 |
 | --- | --- |
 | Python 全般 | `pytest tests/ -q` + `ruff check poselab/ tests/` |
+| 3D エンジン | `pytest tests/test_engine_js.py` (Node ラウンドトリップ) |
 | ビューア | `poselab-viewer` → `?demo=1` でデモ、各形式をドロップ |
 | エクスポート | ビューアでエクスポート → 出力ファイルを再度ドロップ (ラウンドトリップ) |
 | exe GUI | `poselab-studio deploy <exe>/_internal/gui` → exe 画面で F5 → デモ再生 |
@@ -109,8 +112,8 @@ poselab --info    # mmpose の検出状況を確認
 
 ## リリース手順
 
-1. CHANGELOG.md に追記、`pyproject.toml` と `poselab/__init__.py` の
-   バージョンを同時に上げる
+1. CHANGELOG.md に追記、`poselab/__init__.py` の `__version__` を上げる
+   (pyproject.toml は dynamic 参照なので触らない)
 2. ブランチを push → **base=main の PR** を作る (スタック PR 禁止 —
    #9 が main に入らない事故の教訓)
 3. CI (test ×3 / ruff / build) が緑になってからマージ
