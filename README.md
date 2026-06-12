@@ -26,6 +26,16 @@ GUI を使う場合は tkinter も必要です (多くの環境では同梱。Ub
 `~/.cache/poselab/` に自動ダウンロードされます。
 保存先は環境変数 `POSELAB_CACHE_DIR` で変更できます。
 
+### Windows での利用
+
+Windows (64bit Python 3.9–3.12) でも動作します。
+
+- 画像の読み書きは日本語パスに対応しています (内部で
+  `imdecode` / `imencode` を使用)
+- **動画ファイル**のパスは OpenCV のバックエンド依存のため、
+  日本語を含むパスで開けない場合は英数字のみのパスをお試しください
+- Anaconda 環境で GUI が起動しない場合は `conda install tk`
+
 ## CLI の使い方
 
 ```bash

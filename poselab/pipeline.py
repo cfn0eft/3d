@@ -11,6 +11,7 @@ import numpy as np
 
 from poselab.backends.base import PoseBackend
 from poselab.exporters import Exporter
+from poselab.imgio import imwrite
 from poselab.sources import FrameSource
 from poselab.types import FrameResult
 from poselab.visualize import draw_result, draw_status
@@ -98,7 +99,7 @@ def run_pipeline(
             if video_writer is not None:
                 video_writer.write(annotated)
             if image_output is not None:
-                cv2.imwrite(str(image_output), annotated)
+                imwrite(image_output, annotated)
             if show:
                 preview = annotated.copy()
                 draw_status(

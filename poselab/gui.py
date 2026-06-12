@@ -337,9 +337,9 @@ class PoseLabApp:
         )
         if not path:
             return
-        import cv2
+        from poselab.imgio import imwrite
 
-        cv2.imwrite(path, self._last_annotated)
+        imwrite(path, self._last_annotated)
         self.status.set(f"保存しました: {path}")
 
     # ------------------------------------------------------------ エクスポート
