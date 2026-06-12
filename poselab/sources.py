@@ -8,6 +8,8 @@ from typing import Iterator, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from poselab.imgio import imread
+
 # (frame_index, timestamp_ms, frame_bgr)
 Frame = Tuple[int, float, np.ndarray]
 
@@ -48,7 +50,7 @@ class ImageSource(FrameSource):
 
     def __iter__(self) -> Iterator[Frame]:
         for i, path in enumerate(self.paths):
-            frame = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            frame = imread(path)
             if frame is None:
                 raise IOError(f"failed to read image: {path}")
             yield i, float(i), frame

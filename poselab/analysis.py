@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 
@@ -77,6 +77,119 @@ def compute_person_angles(
             system,
         )
     return angles
+
+
+def summarize_results(results) -> Dict[str, object]:
+    """処理結果全体のサマリ統計を返す。
+
+    検出率・平均人数・平均 visibility など、データの品質確認に
+    使える指標をまとめる。
+    """
+    n_frames = len(results)
+    detected = [r for r in results if r.persons]
+    visibilities = [
+        kp.visibility
+        for r in detected
+        for p in r.persons
+        for kp in p.keypoints
+    ]
+    duration_ms = 0.0
+    if n_frames >= 2:
+        duration_ms = results[-1].timestamp_ms - results[0].timestamp_ms
+    return {
+        "total_frames": n_frames,
+        "detected_frames": len(detected),
+        "detection_rate": len(detected) / n_frames if n_frames else 0.0,
+        "max_persons": max((len(r.persons) for r in results), default=0),
+        "mean_persons": (
+            sum(len(r.persons) for r in results) / n_frames if n_frames else 0.0
+        ),
+        "mean_visibility": (
+            float(np.mean(visibilities)) if visibilities else 0.0
+        ),
+        "duration_s": duration_ms / 1000.0,
+    }
+
+
+class VelocityCsvExporter(Exporter):
+    """キーポイント速度のロング形式 CSV (1 行 = 1 キーポイント)。
+
+    前フレームとの差分から速度を計算する。ピクセル座標系の
+    vx / vy / 速さ (px/s) と、ワールド座標系の速さ (m/s) を出力。
+    最初のフレーム (差分が取れない) は行を生成しない。
+    """
+
+    FIELDS = [
+        "frame",
+        "timestamp_ms",
+        "person",
+        "keypoint_id",
+        "keypoint_name",
+        "vx_px_per_s",
+        "vy_px_per_s",
+        "speed_px_per_s",
+        "speed_m_per_s",
+    ]
+
+    def __init__(self, path: "str | Path") -> None:
+        self.path = Path(path)
+        self._file = open(self.path, "w", newline="", encoding="utf-8")
+        self._writer = csv.writer(self._file)
+        self._writer.writerow(self.FIELDS)
+        # person_index -> (timestamp_ms, keypoints, world_keypoints)
+        self._prev: Dict[int, tuple] = {}
+
+    def add(self, result: FrameResult) -> None:
+        current = {}
+        for person in result.persons:
+            pi = person.person_index
+            prev = self._prev.get(pi)
+            if prev is not None:
+                prev_ts, prev_kps, prev_world = prev
+                dt = (result.timestamp_ms - prev_ts) / 1000.0
+                if dt > 0:
+                    prev_w = {wk.index: wk for wk in prev_world}
+                    cur_w = {wk.index: wk for wk in person.world_keypoints}
+                    for kp, pkp in zip(person.keypoints, prev_kps):
+                        vx = (kp.x_px - pkp.x_px) / dt
+                        vy = (kp.y_px - pkp.y_px) / dt
+                        speed_m = ""
+                        wk, pwk = cur_w.get(kp.index), prev_w.get(kp.index)
+                        if wk is not None and pwk is not None:
+                            speed_m = "%.6f" % (
+                                float(
+                                    np.linalg.norm(
+                                        [
+                                            wk.x - pwk.x,
+                                            wk.y - pwk.y,
+                                            wk.z - pwk.z,
+                                        ]
+                                    )
+                                )
+                                / dt
+                            )
+                        self._writer.writerow(
+                            [
+                                result.frame_index,
+                                f"{result.timestamp_ms:.3f}",
+                                pi,
+                                kp.index,
+                                kp.name,
+                                f"{vx:.3f}",
+                                f"{vy:.3f}",
+                                f"{float(np.hypot(vx, vy)):.3f}",
+                                speed_m,
+                            ]
+                        )
+            current[pi] = (
+                result.timestamp_ms,
+                person.keypoints,
+                person.world_keypoints,
+            )
+        self._prev = current
+
+    def close(self) -> None:
+        self._file.close()
 
 
 class AngleCsvExporter(Exporter):
