@@ -61,6 +61,14 @@ def build_parser() -> argparse.ArgumentParser:
     g_out.add_argument("--csv", type=Path, help="座標を CSV (ロング形式) で出力")
     g_out.add_argument("--json", type=Path, help="座標を JSON で出力")
     g_out.add_argument("--npz", type=Path, help="座標を NumPy .npz で出力")
+    g_out.add_argument(
+        "--angles-csv", type=Path,
+        help="関節角度 (肘・肩・股・膝・足首) を CSV で出力",
+    )
+    g_out.add_argument(
+        "--smooth", type=int, default=0, metavar="N",
+        help="座標を N フレームの移動平均で平滑化してから出力 (0=無効)",
+    )
     g_out.add_argument("--save-video", type=Path, help="骨格を描画した動画を保存")
     g_out.add_argument("--save-image", type=Path, help="骨格を描画した画像を保存 (静止画入力時)")
 
@@ -77,6 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
     g_misc.add_argument("--max-frames", type=int, help="処理する最大フレーム数")
     g_misc.add_argument("--camera-width", type=int, help="カメラの取得幅")
     g_misc.add_argument("--camera-height", type=int, help="カメラの取得高さ")
+    g_misc.add_argument(
+        "--camera-mirror", action="store_true",
+        help="カメラ映像を左右反転 (鏡像) で処理する",
+    )
     g_misc.add_argument("--quiet", "-q", action="store_true", help="進捗表示を抑制")
     return parser
 
@@ -107,6 +119,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             specs[0],
             camera_width=args.camera_width,
             camera_height=args.camera_height,
+            camera_mirror=args.camera_mirror,
         )
         is_static = isinstance(source, ImageSource)
 
@@ -122,19 +135,32 @@ def main(argv: Optional[List[str]] = None) -> int:
         static_image_mode=is_static,
     )
 
-    exporters: List[Exporter] = []
     metadata = {
         "tool": f"poselab {__version__}",
         "backend": backend.name,
         "model": args.model,
         "input": specs,
     }
-    if args.csv:
-        exporters.append(CsvExporter(args.csv))
-    if args.json:
-        exporters.append(JsonExporter(args.json, LANDMARK_NAMES, metadata))
-    if args.npz:
-        exporters.append(NpzExporter(args.npz, LANDMARK_NAMES, args.num_poses))
+    if args.smooth > 1:
+        metadata["smoothing_window"] = args.smooth
+
+    def build_exporters() -> List[Exporter]:
+        exporters: List[Exporter] = []
+        if args.csv:
+            exporters.append(CsvExporter(args.csv))
+        if args.json:
+            exporters.append(JsonExporter(args.json, LANDMARK_NAMES, metadata))
+        if args.npz:
+            exporters.append(NpzExporter(args.npz, LANDMARK_NAMES, args.num_poses))
+        if args.angles_csv:
+            from poselab.analysis import AngleCsvExporter
+
+            exporters.append(AngleCsvExporter(args.angles_csv))
+        return exporters
+
+    # 平滑化は全フレームを見てから行うため、有効時は後段でまとめて出力する
+    streaming = args.smooth <= 1
+    exporters = build_exporters() if streaming else []
 
     video_writer = None
     if args.save_video:
@@ -167,6 +193,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     finally:
         backend.close()
 
+    if not streaming:
+        from poselab.exporters import export_results
+        from poselab.filters import smooth_results
+
+        results = smooth_results(results, args.smooth)
+        export_results(results, build_exporters())
+
     if not args.quiet:
         print(file=sys.stderr)
         n_detected = sum(1 for r in results if r.persons)
@@ -176,6 +209,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         for label, path in (
             ("CSV", args.csv), ("JSON", args.json), ("NPZ", args.npz),
+            ("角度CSV", args.angles_csv),
             ("動画", args.save_video), ("画像", args.save_image),
         ):
             if path:

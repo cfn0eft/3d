@@ -57,11 +57,15 @@ class PoseLabApp:
         # 実行状態
         self._worker: Optional[threading.Thread] = None
         self._stop_flag = threading.Event()
+        self._pause_flag = threading.Event()
         # Tk 変数はワーカースレッドから読めないため Event にミラーする
         self._record_enabled = threading.Event()
         self._frame_queue: "queue.Queue[tuple]" = queue.Queue(maxsize=2)
         self._recorded: List[FrameResult] = []
         self._photo = None  # GC 防止のため参照を保持
+        self._last_annotated: Optional[np.ndarray] = None
+        self._fps = 0.0
+        self._last_frame_time: Optional[float] = None
 
         self._build_ui()
         self._sync_record_flag()
@@ -93,7 +97,14 @@ class PoseLabApp:
         self.camera_index = tk.IntVar(value=0)
         ttk.Spinbox(cam_row, from_=0, to=16, width=4,
                     textvariable=self.camera_index).pack(side="left", padx=4)
+        self.mirror_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(src, text="ミラー表示 (左右反転)",
+                        variable=self.mirror_var).pack(anchor="w")
         ttk.Button(src, text="カメラ開始", command=self.start_camera).pack(fill="x", pady=2)
+        self.pause_button = ttk.Button(
+            src, text="一時停止", command=self.toggle_pause
+        )
+        self.pause_button.pack(fill="x", pady=2)
         ttk.Button(src, text="停止", command=self.stop).pack(fill="x", pady=2)
 
         cfg = ttk.LabelFrame(panel, text="モデル設定 (次回開始時に適用)", padding=6)
@@ -121,6 +132,8 @@ class PoseLabApp:
         self.labels_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(view, text="キーポイント名を表示",
                         variable=self.labels_var).pack(anchor="w")
+        ttk.Button(view, text="現在フレームを画像保存...",
+                   command=self.save_current_frame).pack(fill="x", pady=2)
 
         rec = ttk.LabelFrame(panel, text="記録・エクスポート", padding=6)
         rec.pack(fill="x", pady=6)
@@ -135,6 +148,8 @@ class PoseLabApp:
                    command=lambda: self.export_recorded("json")).pack(fill="x", pady=2)
         ttk.Button(rec, text="NPZ へ保存...",
                    command=lambda: self.export_recorded("npz")).pack(fill="x", pady=2)
+        ttk.Button(rec, text="関節角度 CSV へ保存...",
+                   command=lambda: self.export_recorded("angles")).pack(fill="x", pady=2)
 
         batch = ttk.LabelFrame(panel, text="一括処理", padding=6)
         batch.pack(fill="x", pady=6)
@@ -164,10 +179,25 @@ class PoseLabApp:
 
     def start_camera(self) -> None:
         index = self.camera_index.get()
-        self._start_worker(lambda: CameraSource(index), static=False)
+        mirror = self.mirror_var.get()
+        self._start_worker(
+            lambda: CameraSource(index, mirror=mirror), static=False
+        )
 
     def stop(self) -> None:
         self._stop_flag.set()
+        self._pause_flag.clear()
+        self.pause_button.config(text="一時停止")
+
+    def toggle_pause(self) -> None:
+        if self._pause_flag.is_set():
+            self._pause_flag.clear()
+            self.pause_button.config(text="一時停止")
+            self.status.set("再開しました")
+        else:
+            self._pause_flag.set()
+            self.pause_button.config(text="再開")
+            self.status.set("一時停止中")
 
     def _sync_record_flag(self) -> None:
         if self.record_var.get():
@@ -181,6 +211,8 @@ class PoseLabApp:
         if self._worker is not None and self._worker.is_alive():
             self._worker.join(timeout=5.0)
         self._stop_flag.clear()
+        self._fps = 0.0
+        self._last_frame_time = None
         self.status.set("モデルを準備中... (初回はダウンロードが入ります)")
 
         model = self.model_var.get()
@@ -211,6 +243,8 @@ class PoseLabApp:
                         self._frame_queue.put_nowait(("frame", annotated, result))
                     except queue.Full:
                         pass
+                    while self._pause_flag.is_set() and not self._stop_flag.is_set():
+                        time.sleep(0.05)
                     if fps_interval:
                         now = time.monotonic()
                         wait = fps_interval - (now - last_t[0])
@@ -242,11 +276,23 @@ class PoseLabApp:
             while True:
                 kind, payload, result = self._frame_queue.get_nowait()
                 if kind == "frame":
+                    self._last_annotated = payload
                     self._show_frame(payload)
+                    now = time.monotonic()
+                    if self._last_frame_time is not None:
+                        dt = now - self._last_frame_time
+                        if dt > 0:
+                            inst = 1.0 / dt
+                            self._fps = (
+                                inst if self._fps == 0.0
+                                else 0.85 * self._fps + 0.15 * inst
+                            )
+                    self._last_frame_time = now
                     self.status.set(
                         f"フレーム {result.frame_index}  "
                         f"検出 {len(result.persons)} 人  "
-                        f"t={result.timestamp_ms / 1000.0:.2f}s"
+                        f"t={result.timestamp_ms / 1000.0:.2f}s  "
+                        f"{self._fps:.1f} fps"
                     )
                     self.rec_label.config(text=f"記録: {len(self._recorded)} フレーム")
                 elif kind == "done":
@@ -279,6 +325,23 @@ class PoseLabApp:
         self.canvas.delete("all")
         self.canvas.create_image(cw // 2, ch // 2, image=self._photo)
 
+    def save_current_frame(self) -> None:
+        from tkinter import filedialog, messagebox
+
+        if self._last_annotated is None:
+            messagebox.showinfo("poselab", "表示中のフレームがありません")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg")],
+        )
+        if not path:
+            return
+        import cv2
+
+        cv2.imwrite(path, self._last_annotated)
+        self.status.set(f"保存しました: {path}")
+
     # ------------------------------------------------------------ エクスポート
     def clear_recording(self) -> None:
         self._recorded = []
@@ -290,7 +353,7 @@ class PoseLabApp:
         if not self._recorded:
             messagebox.showinfo("poselab", "記録されたフレームがありません")
             return
-        ext = {"csv": ".csv", "json": ".json", "npz": ".npz"}[fmt]
+        ext = {"csv": ".csv", "json": ".json", "npz": ".npz", "angles": ".csv"}[fmt]
         path = filedialog.asksaveasfilename(
             defaultextension=ext, filetypes=[(fmt.upper(), f"*{ext}")]
         )
@@ -298,6 +361,10 @@ class PoseLabApp:
             return
         if fmt == "csv":
             exporter = CsvExporter(path)
+        elif fmt == "angles":
+            from poselab.analysis import AngleCsvExporter
+
+            exporter = AngleCsvExporter(path)
         elif fmt == "json":
             exporter = JsonExporter(
                 path, LANDMARK_NAMES, {"tool": f"poselab {__version__}"}

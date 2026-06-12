@@ -86,7 +86,11 @@ class VideoSource(FrameSource):
 
 
 class CameraSource(FrameSource):
-    """接続カメラ (Web カメラ等)。タイムスタンプは取得時刻ベース。"""
+    """接続カメラ (Web カメラ等)。タイムスタンプは取得時刻ベース。
+
+    mirror=True で左右反転 (鏡像) 表示。反転した画像で推定するため、
+    キーポイントの left/right は被写体実際の左右と逆になる点に注意。
+    """
 
     is_live = True
 
@@ -95,7 +99,9 @@ class CameraSource(FrameSource):
         index: int = 0,
         width: Optional[int] = None,
         height: Optional[int] = None,
+        mirror: bool = False,
     ) -> None:
+        self.mirror = mirror
         self.cap = cv2.VideoCapture(index)
         if not self.cap.isOpened():
             raise IOError(f"failed to open camera index {index}")
@@ -115,6 +121,8 @@ class CameraSource(FrameSource):
             ok, frame = self.cap.read()
             if not ok:
                 break
+            if self.mirror:
+                frame = cv2.flip(frame, 1)
             ts = (time.monotonic() - start) * 1000.0
             yield index, ts, frame
             index += 1
@@ -127,6 +135,7 @@ def open_source(
     spec: str,
     camera_width: Optional[int] = None,
     camera_height: Optional[int] = None,
+    camera_mirror: bool = False,
 ) -> FrameSource:
     """入力指定文字列からソースを生成する。
 
@@ -137,7 +146,7 @@ def open_source(
     low = spec.lower()
     if low.startswith(("camera:", "cam:")):
         index = int(spec.split(":", 1)[1])
-        return CameraSource(index, camera_width, camera_height)
+        return CameraSource(index, camera_width, camera_height, mirror=camera_mirror)
     path = Path(spec)
     if path.suffix.lower() in IMAGE_EXTENSIONS:
         return ImageSource([path])
