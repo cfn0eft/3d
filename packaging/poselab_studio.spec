@@ -14,14 +14,19 @@
   GUI の app.js はサーバーが起動時に連結生成する
 """
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files
+from PyInstaller.utils.hooks import (
+    collect_all,
+    collect_data_files,
+    collect_submodules,
+)
 
 APP_NAME = "PoseLabStudio"
 MM_PACKAGES = ("mmengine", "mmcv", "mmdet", "mmpose")
 
 datas = []
 binaries = []
-hiddenimports = ["poselab.cli", "poselab.studio.server"]
+# poselab の全サブモジュール (server が pose3d / backends 等を遅延 import する)
+hiddenimports = collect_submodules("poselab")
 
 for pkg in MM_PACKAGES:
     d, b, h = collect_all(pkg)
@@ -29,6 +34,7 @@ for pkg in MM_PACKAGES:
     binaries += b
     hiddenimports += h
 
+# poselab のパッケージデータ (webviewer/static, studio/gui)
 datas += collect_data_files("poselab")
 
 a = Analysis(
