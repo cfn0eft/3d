@@ -363,6 +363,22 @@ def _run_auto_output(parser: argparse.ArgumentParser, args) -> int:
 
 def _run_prepare_models(parser: argparse.ArgumentParser, args) -> int:
     """--prepare-models: 推定モデルの重みを事前ダウンロードする。"""
+    # MediaPipe バックエンド (--pose3d 無し) は Pose Landmarker の .task を取得
+    if args.backend == "mediapipe" and not args.pose3d:
+        from poselab.models import get_model_path
+
+        try:
+            print(
+                f"MediaPipe モデル '{args.model}' を準備しています...",
+                file=sys.stderr,
+            )
+            path = get_model_path(args.model)
+        except Exception as exc:  # noqa: BLE001 - 取得失敗はそのまま報告
+            print(f"エラー: {exc}", file=sys.stderr)
+            return 1
+        print(f"モデルの準備が完了しました: {path}", file=sys.stderr)
+        return 0
+
     from poselab.backends.mmpose_backend import DEFAULT_POSE2D
     from poselab.pose3d import DEFAULT_LIFT, prepare_models
 
