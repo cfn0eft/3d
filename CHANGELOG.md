@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1 (2026-06-13)
+
+### 修正
+- **MMPose 3D パイプラインの既定 2D モデル名を修正**。既定値が旧命名規則の
+  `rtmpose-m_simcc-coco_pt-aic-coco_420e-256x192` のままで、mmpose>=1.2 の
+  metafile に該当名が無く `ValueError: Cannot find model: ... in mmpose` で
+  推定・モデル事前ダウンロード(`--pose3d --prepare-models`)が失敗していた。
+  現行 metafile に登録されている `rtmpose-m_8xb256-420e_aic-coco-256x192`
+  (RTMPose-M / AIC+COCO 事前学習 / 256x192)へ変更(高精度プロファイルの
+  `rtmpose-l_8xb256-420e_aic-coco-384x288` と命名規則を統一)
+
 ## 0.9.0 (2026-06-13)
 
 ### 追加
