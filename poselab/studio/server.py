@@ -1,9 +1,11 @@
 """Pose3DStudio 後継のローカル Web GUI サーバー (独自実装)。
 
 `poselab/studio/gui/` の Web GUI (旧 Pose3DStudio.exe と同じ画面) を
-poselab 自身のパイプラインへ接続する。推定は poselab CLI
-(``--pose3d``: mmpose 2D + 3D リフティング) をサブプロセスとして
-実行し、進捗・ログ・出力を Server-Sent Events でブラウザへ流す。
+poselab 自身のパイプラインへ接続する。推定は poselab CLI を
+サブプロセスとして実行し (バックエンドは選択可:
+``--pose3d`` = mmpose 2D + 3D リフティング、または
+``--backend mediapipe`` = GPU 不要の MediaPipe 2D/3D)、
+進捗・ログ・出力を Server-Sent Events でブラウザへ流す。
 
 起動: poselab-studio serve  (または配布版 exe を起動)
 
@@ -86,6 +88,12 @@ def worker_command_prefix() -> List[str]:
     return [sys.executable, "-m", "poselab.cli"]
 
 
+def normalize_backend(value: "str | None") -> str:
+    """バックエンド名を正規化する (既定は mmpose、未知の値も mmpose)。"""
+    backend = str(value or "mmpose").strip().lower()
+    return backend if backend in ("mmpose", "mediapipe") else "mmpose"
+
+
 def normalize_job(payload: dict) -> dict:
     """GUI の payload を 1 ジョブの正規形に変換する。"""
     input_path = str(payload.get("input") or "").strip()
@@ -93,14 +101,23 @@ def normalize_job(payload: dict) -> dict:
     if input_path and not output_root:
         p = Path(input_path)
         output_root = str(p.parent / p.stem)
+    try:
+        num_poses = max(1, int(payload.get("num_poses") or 1))
+    except (TypeError, ValueError):
+        num_poses = 1
     return {
         "input": input_path,
         "output_root": output_root,
+        "backend": normalize_backend(payload.get("backend")),
         "csv_format": payload.get("csv_format") or "both",
         "reencode": bool(payload.get("reencode", True)),
         "progress": bool(payload.get("progress", True)),
         "center_root": bool(payload.get("center_root", False)),
         "normalize_scale": bool(payload.get("normalize_scale", False)),
+        # MediaPipe バックエンド用 (モデルサイズ / 最大検出人数)
+        "model": str(payload.get("model") or "full"),
+        "num_poses": num_poses,
+        # MMPose バックエンド用 (人物検出 + 2D + 3D リフティングのモデル)
         "pose2d_model": config_to_model_name(payload.get("pose2d_config")),
         "lift_model": config_to_model_name(payload.get("pose3d_config")),
         "det_model": config_to_model_name(payload.get("det_config")),
@@ -126,9 +143,40 @@ def job_output_paths(job: dict) -> Dict[str, Path]:
     return paths
 
 
+def _append_output_flags(cmd: List[str], job: dict, paths: Dict[str, Path]) -> None:
+    """両バックエンド共通の出力フラグ (H.264 / CSV / quiet) を付ける。"""
+    if job.get("reencode"):
+        cmd.append("--h264")
+    if "wide_csv" in paths:
+        cmd.extend(["--wide-csv", str(paths["wide_csv"])])
+    if "long_csv" in paths:
+        cmd.extend(["--csv", str(paths["long_csv"])])
+    if not job.get("progress", True):
+        cmd.append("--quiet")
+
+
 def build_command(job: dict) -> List[str]:
     """ジョブを実行する poselab CLI コマンドを組み立てる。"""
     paths = job_output_paths(job)
+    if job.get("backend") == "mediapipe":
+        # MediaPipe: GPU 不要の 2D/3D 推定 (--pose3d は使わない)。
+        # 出力 JSON は poselab 形式 (world_keypoints 入り、ビューアが再生可)。
+        cmd = [
+            *worker_command_prefix(),
+            "--input", job["input"],
+            "--backend", "mediapipe",
+            "--model", str(job.get("model") or "full"),
+            "--json", str(paths["json"]),
+            "--summary-json", str(paths["summary"]),
+            "--save-video", str(paths["video"]),
+        ]
+        num_poses = int(job.get("num_poses") or 1)
+        if num_poses > 1:
+            cmd.extend(["--num-poses", str(num_poses)])
+        _append_output_flags(cmd, job, paths)
+        return cmd
+
+    # MMPose: RTMDet + RTMPose 2D → VideoPose3D 3D リフティング。
     cmd = [
         *worker_command_prefix(),
         "--input", job["input"],
@@ -137,12 +185,7 @@ def build_command(job: dict) -> List[str]:
         "--summary-json", str(paths["summary"]),
         "--save-video", str(paths["video"]),
     ]
-    if job.get("reencode"):
-        cmd.append("--h264")
-    if "wide_csv" in paths:
-        cmd.extend(["--wide-csv", str(paths["wide_csv"])])
-    if "long_csv" in paths:
-        cmd.extend(["--csv", str(paths["long_csv"])])
+    _append_output_flags(cmd, job, paths)
     for key, flag in (
         ("pose2d_model", "--pose2d-model"),
         ("lift_model", "--lift-model"),
@@ -151,13 +194,22 @@ def build_command(job: dict) -> List[str]:
     ):
         if job.get(key):
             cmd.extend([flag, str(job[key])])
-    if not job.get("progress", True):
-        cmd.append("--quiet")
     return cmd
 
 
 def prepare_models_command(job: dict) -> List[str]:
-    """推定モデル一式 (検出 + 2D + 3D) を事前ダウンロードするコマンド。"""
+    """推定モデルを事前ダウンロードするコマンド。
+
+    MMPose は検出 + 2D + 3D の重みを、MediaPipe は Pose Landmarker の
+    .task モデルを取得する。
+    """
+    if job.get("backend") == "mediapipe":
+        return [
+            *worker_command_prefix(),
+            "--backend", "mediapipe",
+            "--model", str(job.get("model") or "full"),
+            "--prepare-models",
+        ]
     cmd = [*worker_command_prefix(), "--pose3d", "--prepare-models"]
     for key, flag in (
         ("pose2d_model", "--pose2d-model"),
@@ -171,7 +223,16 @@ def prepare_models_command(job: dict) -> List[str]:
 
 
 def model_download_entries(job: dict, status: str) -> List[dict]:
-    """「モデルダウンロード」パネル用の 3 モデル (検出 / 2D / 3D) 一覧。"""
+    """「モデルダウンロード」パネル用のモデル一覧。
+
+    MMPose は 3 モデル (検出 / 2D / 3D)、MediaPipe は 1 モデル
+    (Pose Landmarker) を返す。
+    """
+    if job.get("backend") == "mediapipe":
+        size = job.get("model") or "full"
+        return [
+            {"name": f"MediaPipe Pose ({size})", "status": status},
+        ]
     det = job.get("det_model") or "RTMDet (既定)"
     pose2d = job.get("pose2d_model") or "RTMPose (既定)"
     lift = job.get("lift_model") or "VideoPose3D (既定)"
@@ -259,16 +320,17 @@ def preflight(payload: dict) -> dict:
         if not parent.exists():
             warnings.append(f"Output folder does not exist: {parent}")
 
-    try:
-        import importlib.util
+    if job["backend"] == "mmpose":
+        try:
+            import importlib.util
 
-        if importlib.util.find_spec("mmpose") is None:
-            warnings.append(
-                "mmpose is not installed: the 3D pipeline cannot run "
-                "(README の MMPose バックエンド参照)。"
-            )
-    except Exception:
-        pass
+            if importlib.util.find_spec("mmpose") is None:
+                warnings.append(
+                    "mmpose is not installed: the 3D pipeline cannot run "
+                    "(README の MMPose バックエンド参照)。"
+                )
+        except Exception:
+            pass
 
     if job["reencode"] and shutil.which("ffmpeg") is None:
         warnings.append("ffmpeg not found: H.264 re-encode will be skipped.")
@@ -276,23 +338,9 @@ def preflight(payload: dict) -> dict:
     return {"ok": True, "warnings": warnings, "info": info}
 
 
-def summarize_results_json(path: Path) -> dict:
-    """mmpose 形式 results JSON から GUI 用の簡易サマリを作る。"""
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    seq = data.get("instance_info") or []
-    frames = len(seq)
-    counts: List[int] = []
-    scores: List[float] = []
-    for entry in seq:
-        instances = entry.get("instances") or []
-        counts.append(len(instances))
-        for inst in instances:
-            for s in inst.get("keypoint_scores") or []:
-                try:
-                    scores.append(float(s))
-                except (TypeError, ValueError):
-                    continue
+def _summary_from_counts(
+    frames: int, counts: List[int], scores: List[float]
+) -> dict:
     avg_instances = round(sum(counts) / frames, 2) if frames else 0
     avg_score = round(sum(scores) / len(scores), 3) if scores else 0
     return {
@@ -300,6 +348,47 @@ def summarize_results_json(path: Path) -> dict:
         "avg_instances": avg_instances,
         "avg_score": avg_score,
     }
+
+
+def summarize_results_json(path: Path) -> dict:
+    """results JSON から GUI 用の簡易サマリを作る。
+
+    MMPose 形式 (instance_info / keypoint_scores) と poselab 形式
+    (frames / persons / keypoints[].visibility) の両方に対応する。
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    counts: List[int] = []
+    scores: List[float] = []
+
+    if "instance_info" in data:  # MMPose 形式
+        seq = data.get("instance_info") or []
+        for entry in seq:
+            instances = entry.get("instances") or []
+            counts.append(len(instances))
+            for inst in instances:
+                for s in inst.get("keypoint_scores") or []:
+                    try:
+                        scores.append(float(s))
+                    except (TypeError, ValueError):
+                        continue
+        return _summary_from_counts(len(seq), counts, scores)
+
+    # poselab 形式 ({metadata, frames}): MediaPipe バックエンドの出力。
+    frames_seq = data.get("frames") or []
+    for entry in frames_seq:
+        persons = entry.get("persons") or []
+        counts.append(len(persons))
+        for person in persons:
+            for kp in person.get("keypoints") or []:
+                v = kp.get("visibility")
+                if v is None:
+                    continue
+                try:
+                    scores.append(float(v))
+                except (TypeError, ValueError):
+                    continue
+    return _summary_from_counts(len(frames_seq), counts, scores)
 
 
 def open_in_explorer(path: Path) -> bool:

@@ -23,8 +23,14 @@ const clearQueueBtn = $("clear-queue");
 const queueList = $("queue-list");
 const queueMeta = $("queue-meta");
 const preset = $("preset");
+const backendSelect = $("backend");
 const modelProfile = $("model-profile");
 const detectorProfile = $("detector-profile");
+const mmposeOnly = $("mmpose-only");
+const mediapipeOnly = $("mediapipe-only");
+const mpModel = $("mp-model");
+const mpNumPoses = $("mp-num-poses");
+const runHint = $("run-hint");
 const centerRoot = $("center-root");
 const normalizeScale = $("normalize-scale");
 const gpuStatus = $("gpu-status");
@@ -164,10 +170,16 @@ function sanitize(value) {
   return value.replace(/^["']+|["']+$/g, "").trim();
 }
 
+function currentBackend() {
+  return backendSelect ? backendSelect.value : "mmpose";
+}
+
 function buildPayload(options = {}) {
+  const backend = currentBackend();
   const payload = {
     input: sanitize(inputPath.value),
     output_root: sanitize(outputRoot.value),
+    backend,
     csv_format: csvFormat.value,
     reencode: reencode.checked,
     progress: progressToggle.checked,
@@ -175,6 +187,13 @@ function buildPayload(options = {}) {
     normalize_scale: normalizeScale.checked,
     ...options,
   };
+  if (backend === "mediapipe") {
+    payload.model = mpModel ? mpModel.value : "full";
+    payload.num_poses = mpNumPoses
+      ? Math.max(1, parseInt(mpNumPoses.value, 10) || 1)
+      : 1;
+    return payload;
+  }
   const profile = MODEL_PROFILES[modelProfile.value] || {};
   Object.keys(profile).forEach((key) => {
     if (profile[key]) {
@@ -188,6 +207,14 @@ function buildPayload(options = {}) {
     }
   });
   return payload;
+}
+
+function applyBackend() {
+  const isMediapipe = currentBackend() === "mediapipe";
+  if (mmposeOnly) mmposeOnly.hidden = isMediapipe;
+  if (mediapipeOnly) mediapipeOnly.hidden = !isMediapipe;
+  if (runHint) runHint.textContent = isMediapipe ? "CPU 可" : "GPU required";
+  schedulePreflight();
 }
 
 function deriveOutputRoot(input) {
@@ -909,6 +936,9 @@ normalizeScale.addEventListener("change", schedulePreflight);
 preset.addEventListener("change", () => applyPreset(preset.value));
 modelProfile.addEventListener("change", () => schedulePreflight());
 detectorProfile.addEventListener("change", () => schedulePreflight());
+if (backendSelect) backendSelect.addEventListener("change", applyBackend);
+if (mpModel) mpModel.addEventListener("change", schedulePreflight);
+if (mpNumPoses) mpNumPoses.addEventListener("change", schedulePreflight);
 
 /* ----- ビューア操作の配線 ----- */
 
@@ -1079,6 +1109,7 @@ document.addEventListener("DOMContentLoaded", () => {
   startEvents();
   applyAutoOutput();
   applyPreset(preset.value);
+  applyBackend();
   schedulePreflight();
   setInterval(pollStatus, 2000);
 });

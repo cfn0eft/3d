@@ -117,6 +117,24 @@ def test_normalize_job_defaults_and_output_root():
     assert job["csv_format"] == "both"
     assert job["reencode"] is True
     assert job["pose2d_model"] is None
+    # バックエンド未指定は MMPose (従来挙動を維持)
+    assert job["backend"] == "mmpose"
+
+
+def test_normalize_job_mediapipe_fields():
+    job = normalize_job({
+        "input": "C:/data/walk.mp4",
+        "backend": "MediaPipe",  # 大文字小文字は無視
+        "model": "heavy",
+        "num_poses": "3",
+    })
+    assert job["backend"] == "mediapipe"
+    assert job["model"] == "heavy"
+    assert job["num_poses"] == 3
+    # 不正な num_poses は 1 に丸める
+    assert normalize_job({"input": "x", "num_poses": "oops"})["num_poses"] == 1
+    # 未知のバックエンドは mmpose に倒す
+    assert normalize_job({"input": "x", "backend": "foo"})["backend"] == "mmpose"
 
 
 def test_build_command_flags(fake_env):
@@ -148,6 +166,38 @@ def test_build_command_flags(fake_env):
     assert "--csv" in cmd2
     assert "--wide-csv" not in cmd2
     assert "--quiet" in cmd2
+
+
+def test_build_command_mediapipe(fake_env):
+    job = normalize_job({
+        "input": str(fake_env["video"]),
+        "output_root": str(fake_env["tmp"] / "out"),
+        "backend": "mediapipe",
+        "model": "heavy",
+        "num_poses": 2,
+        "csv_format": "both",
+        "reencode": True,
+    })
+    cmd = build_command(job)
+    text = " ".join(cmd)
+    # MediaPipe は 3D リフティング (--pose3d) を使わない
+    assert "--pose3d" not in cmd
+    assert "--backend mediapipe" in text
+    assert "--model heavy" in text
+    assert "--num-poses 2" in text
+    assert "--json" in cmd
+    assert "--summary-json" in cmd
+    assert "--save-video" in cmd
+    assert "--h264" in cmd
+    assert "--wide-csv" in cmd and "--csv" in cmd
+
+    # 1 人なら --num-poses は付けない
+    job1 = normalize_job({
+        "input": str(fake_env["video"]),
+        "backend": "mediapipe",
+    })
+    assert "--num-poses" not in build_command(job1)
+    assert "--model full" in " ".join(build_command(job1))
 
 
 def test_job_output_paths_layout(tmp_path):
@@ -190,6 +240,27 @@ def test_summarize_results_json(tmp_path):
                 {"keypoint_scores": [0.5]},
             ]},
             {"instances": [{"keypoint_scores": [1.0]}]},
+        ],
+    }), encoding="utf-8")
+    summary = summarize_results_json(path)
+    assert summary["frames"] == 2
+    assert summary["avg_instances"] == 1.5
+    assert summary["avg_score"] == 0.75
+
+
+def test_summarize_results_json_poselab(tmp_path):
+    # MediaPipe バックエンドの poselab 形式 JSON ({metadata, frames})
+    path = tmp_path / "results_mp.json"
+    path.write_text(json.dumps({
+        "metadata": {"backend": "mediapipe"},
+        "frames": [
+            {"frame": 0, "persons": [
+                {"keypoints": [{"visibility": 1.0}, {"visibility": 0.5}]},
+                {"keypoints": [{"visibility": 0.5}]},
+            ]},
+            {"frame": 1, "persons": [
+                {"keypoints": [{"visibility": 1.0}]},
+            ]},
         ],
     }), encoding="utf-8")
     summary = summarize_results_json(path)
@@ -293,6 +364,36 @@ def test_model_download_entries():
     assert [e["status"] for e in entries] == ["pending"] * 3
     names = " ".join(e["name"] for e in entries)
     assert "人物検出" in names and "2D" in names and "3D" in names
+
+
+def test_prepare_models_command_mediapipe():
+    job = normalize_job({
+        "input": "_prepare_", "backend": "mediapipe", "model": "lite",
+    })
+    cmd = prepare_models_command(job)
+    text = " ".join(cmd)
+    assert "--pose3d" not in cmd
+    assert "--backend mediapipe" in text
+    assert "--model lite" in text
+    assert "--prepare-models" in cmd
+
+
+def test_model_download_entries_mediapipe():
+    entries = model_download_entries(
+        {"backend": "mediapipe", "model": "heavy"}, "ready"
+    )
+    assert len(entries) == 1
+    assert entries[0]["status"] == "ready"
+    assert "MediaPipe" in entries[0]["name"] and "heavy" in entries[0]["name"]
+
+
+def test_preflight_mediapipe_skips_mmpose_warning(fake_env):
+    res = preflight({
+        "input": str(fake_env["video"]),
+        "backend": "mediapipe",
+    })
+    assert res["ok"] is True
+    assert not any("mmpose" in w.lower() for w in res["warnings"])
 
 
 def test_jobmanager_download_models(fake_env, tmp_path, monkeypatch):

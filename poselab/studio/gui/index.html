@@ -61,6 +61,15 @@
           </div>
 
           <label class="field">
+            <span>バックエンド</span>
+            <select id="backend">
+              <option value="mmpose" selected>MMPose 3D (RTMPose + VideoPose3D)</option>
+              <option value="mediapipe">MediaPipe (33点・GPU不要)</option>
+            </select>
+            <small>MMPose は GPU 推奨の高精度 3D。MediaPipe は CPU でも動く軽量推定です。</small>
+          </label>
+
+          <label class="field">
             <span>プリセット</span>
             <select id="preset">
               <option value="research" selected>Research (フル出力)</option>
@@ -69,23 +78,43 @@
             </select>
           </label>
 
-          <label class="field">
-            <span>モデルプロファイル</span>
-            <select id="model-profile">
-              <option value="balanced" selected>Balanced (標準)</option>
-              <option value="accuracy">Accuracy (RTMPose-L 384×288 + 243frm)</option>
-            </select>
-            <small>高精度プロファイルは追加のチェックポイントが必要です。</small>
-          </label>
+          <div id="mmpose-only">
+            <label class="field">
+              <span>モデルプロファイル</span>
+              <select id="model-profile">
+                <option value="balanced" selected>Balanced (標準)</option>
+                <option value="accuracy">Accuracy (RTMPose-L 384×288 + 243frm)</option>
+              </select>
+              <small>高精度プロファイルは追加のチェックポイントが必要です。</small>
+            </label>
 
-          <label class="field">
-            <span>検出器プロファイル</span>
-            <select id="detector-profile">
-              <option value="balanced" selected>Balanced (RTMDet-M)</option>
-              <option value="accuracy">Accuracy (Faster R-CNN R50-FPN)</option>
-            </select>
-            <small>Accuracy 検出器は速度が低下します。</small>
-          </label>
+            <label class="field">
+              <span>検出器プロファイル</span>
+              <select id="detector-profile">
+                <option value="balanced" selected>Balanced (RTMDet-M)</option>
+                <option value="accuracy">Accuracy (Faster R-CNN R50-FPN)</option>
+              </select>
+              <small>Accuracy 検出器は速度が低下します。</small>
+            </label>
+          </div>
+
+          <div id="mediapipe-only" hidden>
+            <label class="field">
+              <span>モデルサイズ</span>
+              <select id="mp-model">
+                <option value="lite">Lite (高速)</option>
+                <option value="full" selected>Full (標準)</option>
+                <option value="heavy">Heavy (高精度)</option>
+              </select>
+              <small>Lite=高速 / Heavy=高精度。初回使用時に自動ダウンロードされます。</small>
+            </label>
+
+            <label class="field">
+              <span>最大人数</span>
+              <input id="mp-num-poses" type="number" min="1" max="10" value="1" />
+              <small>複数人を検出する場合に増やします (既定 1 人)。</small>
+            </label>
+          </div>
 
           <label class="field">
             <span>入力動画</span>
@@ -156,7 +185,7 @@
 
           <button id="run-btn" class="btn run">
             <span>Run Pipeline</span>
-            <em>GPU required</em>
+            <em id="run-hint">GPU required</em>
           </button>
         </div>
 

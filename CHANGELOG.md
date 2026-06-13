@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.0 (2026-06-13)
+
+### 追加
+- **PoseLab Studio で推定バックエンドを選択可能に**。従来の
+  **MMPose 3D**(RTMDet + RTMPose 2D → VideoPose3D 3D リフティング、GPU 推奨)
+  に加え、**MediaPipe**(33 点・GPU 不要の軽量 2D/3D)を GUI の
+  「バックエンド」から選べるようにした
+  - MediaPipe 選択時はモデルサイズ(lite / full / heavy)と最大人数を
+    指定でき、MMPose 専用のモデル/検出器プロファイルは自動で隠れる
+  - 出力 JSON は poselab 形式(`world_keypoints` 入り)で、そのまま 3D
+    ビューアで再生できる。サマリ表示(フレーム数 / 平均人数 / 平均スコア)も
+    両形式に対応
+  - 「モデルダウンロード」「システムチェック」も選択バックエンドに追従
+    (MediaPipe では mmpose 未導入の警告を出さず、`--prepare-models` で
+    Pose Landmarker の `.task` を事前取得)
+  - CLI の `poselab --backend mediapipe --prepare-models` で MediaPipe
+    モデルだけを事前ダウンロードできるようにした
+
 ## 0.8.0 (2026-06-13)
 
 ### 追加
