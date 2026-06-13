@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.5 (2026-06-13)
+
+### 修正
+- インストールスクリプトが Windows PowerShell 5.1 で、ネイティブコマンドの
+  stderr 出力(例: `py` の "No suitable Python runtime"、pip の警告)を
+  きっかけに即異常終了する不具合を修正。`$ErrorActionPreference='Stop'` の
+  下では PS5.1 が stderr 書き込みを終了エラー化するため、Python 3.11 が
+  無い環境で winget による自動導入に進む前に落ちていた
+  - `$ErrorActionPreference` を `Continue` にし、失敗判定は明示的な終了
+    コードチェックに統一(`install_local.ps1` / `setup_env.ps1`)。ネイティブ
+    出力は `2>&1 | Out-Host` で取り込み、重要なファイル操作のみ
+    `-ErrorAction Stop`
+  - これにより Python 3.11 未導入の環境でも winget で自動導入して継続する
+
 ## 0.6.4 (2026-06-13)
 
 ### 修正

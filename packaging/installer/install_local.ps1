@@ -22,7 +22,11 @@ param(
     [switch]$Gpu    # force CUDA PyTorch
 )
 
-$ErrorActionPreference = 'Stop'
+# Note: do NOT use $ErrorActionPreference='Stop'. On Windows PowerShell 5.1
+# that turns any native-command stderr write (e.g. "py: No suitable Python
+# runtime", or pip warnings) into a terminating error. We check $LASTEXITCODE
+# explicitly instead, and use -ErrorAction Stop on the few critical cmdlets.
+$ErrorActionPreference = 'Continue'
 function Write-Step($m) { Write-Host "==> $m" -ForegroundColor Cyan }
 
 # Repo root (this script lives in packaging/installer/)
@@ -45,9 +49,9 @@ Write-Step 'Checking for Python 3.11'
 $py311 = Resolve-Py311
 if (-not $py311) {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Step 'Python 3.11 not found - installing via winget'
+        Write-Step 'Python 3.11 not found - installing it via winget (this can take a minute)'
         winget install -e --id Python.Python.3.11 --silent `
-            --accept-package-agreements --accept-source-agreements
+            --accept-package-agreements --accept-source-agreements 2>&1 | Out-Host
         $py311 = Resolve-Py311
     }
 }
@@ -57,7 +61,7 @@ if (-not $py311) {
 Write-Host "  Using Python: $py311"
 
 # --- Create the venv ---
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+New-Item -ItemType Directory -Force -Path $InstallDir -ErrorAction Stop | Out-Null
 $venv = Join-Path $InstallDir 'env'
 $python = Join-Path $venv 'Scripts\python.exe'
 if (-not (Test-Path $python)) {
@@ -68,11 +72,11 @@ if (-not (Test-Path $python)) {
 
 # Force numpy<2 for every install (torch 2.1.x is built against NumPy 1.x)
 $constraints = Join-Path $InstallDir 'constraints.txt'
-Set-Content -Path $constraints -Value 'numpy<2' -Encoding Ascii
+Set-Content -Path $constraints -Value 'numpy<2' -Encoding Ascii -ErrorAction Stop
 $env:PIP_CONSTRAINT = $constraints
 
 function Invoke-Pip([string[]]$PipArgs) {
-    & $python -m pip install --no-input @PipArgs
+    & $python -m pip install --no-input @PipArgs 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) { throw ("pip install failed: " + ($PipArgs -join ' ')) }
 }
 
@@ -106,7 +110,7 @@ Invoke-Pip @('chumpy==0.70', '--no-build-isolation')
 # --- OpenMMLab (mim picks the mmcv matching torch CUDA/CPU) ---
 Write-Step 'Installing OpenMMLab (mmengine / mmcv / mmdet / mmpose)'
 Invoke-Pip @('-U', 'openmim')
-& $python -m mim install mmengine 'mmcv==2.1.0' 'mmdet==3.2.0' 'mmpose==1.3.2'
+& $python -m mim install mmengine 'mmcv==2.1.0' 'mmdet==3.2.0' 'mmpose==1.3.2' 2>&1 | Out-Host
 if ($LASTEXITCODE -ne 0) { throw 'mim install failed' }
 
 # --- poselab itself (from the repo) ---
@@ -115,13 +119,13 @@ Invoke-Pip @($RepoRoot)
 
 # --- Launcher + sanity check ---
 $launcher = Join-Path $InstallDir 'PoseLab Studio.cmd'
-Set-Content -Path $launcher -Encoding Ascii -Value @"
+Set-Content -Path $launcher -Encoding Ascii -ErrorAction Stop -Value @"
 @echo off
 "$python" -m poselab.studio %*
 "@
 
 Write-Step 'Verifying the installation'
-& $python -c "import poselab; from poselab.studio import build_app_js; from poselab.studio.server import gpu_info; from mmpose.apis.inferencers import Pose3DInferencer; print('PoseLab Studio env OK:', poselab.__version__)"
+& $python -c "import poselab; from poselab.studio import build_app_js; from poselab.studio.server import gpu_info; from mmpose.apis.inferencers import Pose3DInferencer; print('PoseLab Studio env OK:', poselab.__version__)" 2>&1 | Out-Host
 if ($LASTEXITCODE -ne 0) { throw 'Post-install verification failed' }
 
 # --- Shortcuts (Start Menu / desktop) ---
