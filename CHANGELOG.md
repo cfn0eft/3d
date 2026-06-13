@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.3 (2026-06-13)
+
+### 追加
+- **ローカルインストールスクリプト** (`packaging/installer/install_local.ps1`
+  + ダブルクリック用 `Install-PoseLabStudio.cmd`): 未署名の .exe を実行
+  しないため **Smart App Control にブロックされない**配布物。署名済みの
+  cmd / powershell / Python だけを使い、専用 venv に GPU(または CPU)版
+  PyTorch・mmpose・poselab を導入してスタートメニュー / デスクトップに
+  ショートカットを作る
+  - Python 3.11 が無ければ winget で導入を試みる。NVIDIA GPU を自動判定
+    (CUDA 11.8 / CPU)。`-Cpu` / `-Gpu` で上書き可
+  - CI が CPU モードで実走 (venv + torch + mmpose + poselab + import) して
+    検証する
+- インストーラー .exe が SAC でブロックされる件を README に記載
+
 ## 0.6.2 (2026-06-13)
 
 ### 修正

@@ -45,8 +45,15 @@ jobs:
           $ver = (Select-String -Path poselab/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
           "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      # 実機相当の検証: オンラインインストールのレシピを CPU モードで最後まで通す。
-      # (torch CPU + mmcv/mmdet/mmpose + poselab を実際に入れて import 確認)
+      # 実機相当の検証 1: ローカルインストールスクリプト (推奨配布物。署名不要)。
+      # 実際の Python venv に CPU 版 torch + mmcv/mmdet/mmpose + poselab を入れ、
+      # ショートカット作成と import まで通す。
+      - name: Verify local-install script (CPU)
+        shell: pwsh
+        run: |
+          ./packaging/installer/install_local.ps1 -InstallDir "$env:RUNNER_TEMP\plslocal" -Cpu
+
+      # 実機相当の検証 2: uv ベースのオンラインインストールのレシピを CPU で通す。
       - name: Verify online-install recipe (CPU)
         shell: pwsh
         working-directory: packaging/installer
