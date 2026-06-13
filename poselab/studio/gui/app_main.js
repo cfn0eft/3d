@@ -36,6 +36,7 @@ const checkList = $("check-list");
 const videoInfo = $("video-info");
 const downloadsList = $("downloads-list");
 const downloadsMeta = $("downloads-meta");
+const downloadModels = $("download-models");
 const cancelBtn = $("cancel-btn");
 const previewVideo = $("preview-video");
 const previewSummary = $("preview-summary");
@@ -386,6 +387,11 @@ function renderDownloads(items) {
   if (counts.failed) parts.push(`${counts.failed} failed`);
   if (parts.length === 0) parts.push(`${counts.ready} ready`);
   downloadsMeta.textContent = parts.join(" • ");
+  if (downloadModels) {
+    const busy = counts.downloading > 0;
+    downloadModels.disabled = busy;
+    downloadModels.textContent = busy ? "取得中..." : "ダウンロード";
+  }
 }
 
 function setPreviewVideo(path) {
@@ -882,6 +888,17 @@ openVideo.addEventListener("click", async () => {
 });
 cancelBtn.addEventListener("click", async () => {
   await fetchJSON("/cancel", { method: "POST" });
+});
+downloadModels.addEventListener("click", async () => {
+  const res = await fetchJSON("/download-models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildPayload()),
+  });
+  if (res && res.ok === false && res.error) {
+    alert(res.error);
+    appendLog(`Error: ${res.error}`);
+  }
 });
 refreshChecks.addEventListener("click", () => schedulePreflight());
 reencode.addEventListener("change", schedulePreflight);

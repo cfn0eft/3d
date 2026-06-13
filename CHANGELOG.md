@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 (2026-06-13)
+
+### 追加
+- **PoseLab Studio の「モデルダウンロード」パネルを機能化**。推定モデル
+  (人物検出 RTMDet / 2D RTMPose / 3D VideoPose3D)を**一覧表示**し、
+  「ダウンロード」ボタンで**事前取得**できる(進捗は SSE でライブ表示、
+  取得済みは再起動後も ready 表示)。未取得でも従来どおり Run 時に自動取得
+  - CLI に `poselab --pose3d --prepare-models` を追加(動画不要でモデルの
+    重みを事前ダウンロードして終了)。サーバーはこれをサブプロセス実行する
+- 推論サブプロセスで `PYTHONWARNINGS=ignore` を設定し、mmengine の
+  `pkg_resources is deprecated` 警告などがログに出ないように整理
+
 ## 0.7.3 (2026-06-13)
 
 ### 追加

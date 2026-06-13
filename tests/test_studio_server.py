@@ -23,9 +23,11 @@ from poselab.studio.server import (
     build_command,
     config_to_model_name,
     job_output_paths,
+    model_download_entries,
     normalize_job,
     postprocess_csv_outputs,
     preflight,
+    prepare_models_command,
     serve,
     summarize_results_json,
 )
@@ -274,6 +276,53 @@ def test_jobmanager_cancel(fake_env):
     status = manager.status()
     assert status["running"] is False
     assert status["completed"][-1]["return_code"] != 0
+
+
+def test_prepare_models_command():
+    job = normalize_job({
+        "input": "_prepare_",
+        "pose2d_config": "configs/x/rtmpose-l_8xb256-420e_aic-coco-384x288.py",
+    })
+    cmd = prepare_models_command(job)
+    assert "--pose3d" in cmd and "--prepare-models" in cmd
+    assert "--pose2d-model rtmpose-l_8xb256-420e_aic-coco-384x288" in " ".join(cmd)
+
+
+def test_model_download_entries():
+    entries = model_download_entries({}, "pending")
+    assert [e["status"] for e in entries] == ["pending"] * 3
+    names = " ".join(e["name"] for e in entries)
+    assert "人物検出" in names and "2D" in names and "3D" in names
+
+
+def test_jobmanager_download_models(fake_env, tmp_path, monkeypatch):
+    # マーカーを一時パスへ (前回取得状態に左右されないように)
+    import poselab.studio.server as srv
+    monkeypatch.setattr(srv, "MODEL_READY_MARKER", tmp_path / ".ready")
+
+    script = fake_env["tmp"] / "fake_prepare.py"
+    script.write_text("print('preparing models')\n", encoding="utf-8")
+
+    def download_builder(job):
+        return [sys.executable, str(script)]
+
+    manager = JobManager(download_command_builder=download_builder)
+    # 初期状態: pending (マーカー無し)
+    assert all(d["status"] == "pending" for d in manager.status()["downloads"])
+
+    assert manager.download_models({})["ok"]
+    manager.wait_download(15)
+    downloads = manager.status()["downloads"]
+    assert all(d["status"] == "ready" for d in downloads)
+    assert (tmp_path / ".ready").exists()
+
+    # 失敗ケース
+    bad = fake_env["tmp"] / "bad_prepare.py"
+    bad.write_text("import sys; sys.exit(2)\n", encoding="utf-8")
+    manager2 = JobManager(download_command_builder=lambda job: [sys.executable, str(bad)])
+    assert manager2.download_models({})["ok"]
+    manager2.wait_download(15)
+    assert all(d["status"] == "failed" for d in manager2.status()["downloads"])
 
 
 def test_jobmanager_queue_operations(fake_env):
