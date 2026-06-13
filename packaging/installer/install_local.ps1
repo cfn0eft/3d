@@ -27,10 +27,25 @@ param(
 # runtime", or pip warnings) into a terminating error. We check $LASTEXITCODE
 # explicitly instead, and use -ErrorAction Stop on the few critical cmdlets.
 $ErrorActionPreference = 'Continue'
-function Write-Step($m) { Write-Host "==> $m" -ForegroundColor Cyan }
+
+$RULE = '  ' + ('-' * 52)
+function Write-Banner {
+    Write-Host ''
+    Write-Host '  PoseLab Studio' -ForegroundColor Cyan
+    Write-Host '  Local installer' -ForegroundColor DarkGray
+    Write-Host $RULE -ForegroundColor DarkGray
+}
+function Write-Step($m) {
+    Write-Host ''
+    Write-Host '  > ' -ForegroundColor Cyan -NoNewline
+    Write-Host $m -ForegroundColor White
+}
+function Write-Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
 
 # Repo root (this script lives in packaging/installer/)
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+
+Write-Banner
 
 # --- Find Python 3.11 (install via winget if missing) ---
 function Resolve-Py311 {
@@ -145,10 +160,12 @@ try { New-Shortcut $startMenu $launcher; New-Shortcut $desktop $launcher } catch
 }
 
 Write-Host ''
-Write-Host 'Installation complete.' -ForegroundColor Green
-Write-Host "  Launch: 'PoseLab Studio' on the Start Menu / desktop"
-Write-Host "  or run: `"$launcher`""
+Write-Host $RULE -ForegroundColor DarkGray
+Write-Host '  Installation complete' -ForegroundColor Green
+Write-Host "    Launch from the Start Menu / desktop: 'PoseLab Studio'" -ForegroundColor Gray
+Write-Host "    or run: $launcher" -ForegroundColor DarkGray
 if (-not $useGpu) {
-    Write-Host '  (No GPU detected: running on CPU. Re-run on an NVIDIA GPU machine for CUDA.)' -ForegroundColor Yellow
+    Write-Host '    Note: no GPU detected - running on CPU. Re-run on an NVIDIA GPU for CUDA.' -ForegroundColor Yellow
 }
+Write-Host $RULE -ForegroundColor DarkGray
 exit 0
