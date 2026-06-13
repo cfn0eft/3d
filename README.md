@@ -368,17 +368,44 @@ backend.close()
 バックエンドは `poselab.backends.base.PoseBackend` を継承することで
 他の推定エンジンにも差し替えられる設計です。
 
-## 開発・Pose3DStudio GUI
+## Pose3DStudio 後継 GUI (poselab-studio)
+
+動画を放り込んでキュー処理する Pose3DStudio スタイルの Web GUI を、
+poselab 自身のパイプライン (mmpose 2D + 3D リフティング) で実行できます。
+旧 Pose3DStudio.exe は不要です。
+
+```bash
+poselab-studio          # GUI をブラウザで起動 (要 mmpose。GPU 自動検出)
+```
+
+- ジョブキュー (複数動画・並べ替え・キャンセル)、ライブのログ / 進捗、
+  出力プレビュー (H.264 動画・results JSON のサマリ・埋め込み 3D ビューア)
+- 出力: MMPose 互換 results JSON + ワイド / ロング CSV + 2D/3D 可視化動画
+  (center_root / normalize_scale を CSV の world 座標へ適用可)
+
+### 配布版 exe (インストール不要、GPU 対応)
+
+GitHub Actions の「Build Windows exe (PoseLab Studio)」が、CUDA 版
+PyTorch と OpenMMLab 一式を同梱した Windows 用 zip
+(`PoseLabStudio-win64-cuda118.zip`) をビルドします (手動実行または
+バージョンタグで起動。成果物は Actions の Artifacts からダウンロード)。
+
+- 解凍して `PoseLabStudio.exe` を起動するだけ。Python・pip・依存関係の
+  インストールは一切不要 (モデルの重みのみ初回に自動ダウンロード)
+- NVIDIA GPU (ドライバ 452 以降) があれば CUDA で、無ければ CPU で実行
+- `PoseLabStudio.exe --selftest` で同梱物の自己診断、
+  `PoseLabStudio.exe --cli ...` は poselab CLI として動作
+
+## 開発
 
 開発の全体像・引き継ぎ情報は [CLAUDE.md](CLAUDE.md) と
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) にまとまっています。
 
-デスクトップ版 Pose3DStudio の Web GUI もこのリポジトリがソースです
-(`poselab/studio/gui/`)。ビルドと配備:
+GUI 一式のビルドと旧 exe への配備 (レガシー):
 
 ```bash
 poselab-studio build --out dist/studio-gui      # ビルドのみ
-poselab-studio deploy <exe>/_internal/gui       # exe へ配備 (画面で F5)
+poselab-studio deploy <exe>/_internal/gui       # 旧 exe へ配備 (画面で F5)
 ```
 
 3D 描画エンジンはビューアと共通の `poselab/webviewer/static/engine.js`
