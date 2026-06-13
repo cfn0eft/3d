@@ -71,7 +71,9 @@ function Invoke-Pip([string[]]$PipArgs) {
     if ($LASTEXITCODE -ne 0) { throw ("pip install に失敗: " + ($PipArgs -join ' ')) }
 }
 
-& $python -m pip install --no-input -U pip | Out-Null
+# pip / setuptools / wheel を最新化。wheel は chumpy の --no-build-isolation
+# ビルド (bdist_wheel) に必須で、python -m venv 既定では入らない
+Invoke-Pip @('-U', 'pip', 'setuptools', 'wheel')
 
 # --- GPU 判定 ---
 $useGpu = $false
