@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.2 (2026-06-13)
+## 0.9.3 (2026-06-13)
 
 ### 修正
 - **MMPose 3D の可視化動画 (`--save-video`) が matplotlib 3.10+ で
@@ -13,6 +13,20 @@
   オフスクリーン描画用の非対話 Agg バックエンドへ切り替えるようにした
   (`poselab/_mpl_compat.py`)。これにより 2D+3D 可視化動画の出力が
   matplotlib のバージョンに依存せず動作する
+
+## 0.9.2 (2026-06-13)
+
+### 追加
+- **アプリアイコンを同梱** (`packaging/installer/poselab.ico`、GUI と同じ
+  ブランドマークを Pillow で生成: `packaging/make_icon.py`)。ローカル
+  インストーラ (`install_local.ps1`) と Inno Setup インストーラ
+  (`poselab_studio.iss`) が、スタートメニュー / デスクトップのショートカット
+  および Setup.exe / アンインストール項目にこのアイコンを設定するようにした
+- **ローカルインストールにアンインストーラを追加** —
+  `packaging\installer\Uninstall-PoseLabStudio.cmd`
+  (内部は `uninstall_local.ps1`)。インストール先一式とショートカットを削除し、
+  `-Cache` 指定でダウンロード済みモデル重み (`~/.cache/poselab`,
+  `~/.cache/torch`) も削除する
 
 ## 0.9.1 (2026-06-13)
 
