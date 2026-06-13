@@ -1,7 +1,8 @@
 name: Build Windows exe (PoseLab Studio)
 
-# GPU (CUDA) 同梱の配布版をビルドする。手動実行 (workflow_dispatch) か
-# vX.Y.Z タグの push で走り、Actions の Artifacts に zip を置く。
+# GPU (CUDA) 同梱の配布版をビルドする。手動実行 (workflow_dispatch)、
+# vX.Y.Z タグの push、または packaging 関連を変更した PR で走り、
+# Actions の Artifacts に zip を置く。
 # CUDA 11.8 版 torch を同梱 (ドライバ 452 以降で動作、古い GPU にも広く対応。
 # GPU が無い環境では自動的に CPU 実行になる)。
 
@@ -9,6 +10,10 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/build-exe.yml"
+      - "packaging/**"
 
 jobs:
   build-exe:
