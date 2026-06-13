@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.2 (2026-06-13)
+
+### 追加
+- **アプリアイコンを同梱** (`packaging/installer/poselab.ico`、GUI と同じ
+  ブランドマークを Pillow で生成: `packaging/make_icon.py`)。ローカル
+  インストーラ (`install_local.ps1`) と Inno Setup インストーラ
+  (`poselab_studio.iss`) が、スタートメニュー / デスクトップのショートカット
+  および Setup.exe / アンインストール項目にこのアイコンを設定するようにした
+- **ローカルインストールにアンインストーラを追加** —
+  `packaging\installer\Uninstall-PoseLabStudio.cmd`
+  (内部は `uninstall_local.ps1`)。インストール先一式とショートカットを削除し、
+  `-Cache` 指定でダウンロード済みモデル重み (`~/.cache/poselab`,
+  `~/.cache/torch`) も削除する
+
 ## 0.9.1 (2026-06-13)
 
 ### 修正

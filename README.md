@@ -400,6 +400,11 @@ packaging\installer\Install-PoseLabStudio.cmd   # ダブルクリックでも可
   cmd / powershell / Python だけを使うためブロックされません
   (未署名インストーラー .exe は SAC が有効だとブロックされます)
 - Python 3.11 が無ければ winget で導入を試みます。NVIDIA GPU を自動判定
+- スタートメニュー / デスクトップのショートカットにはアプリアイコンが付きます
+- **アンインストール**: `packaging\installer\Uninstall-PoseLabStudio.cmd` を
+  ダブルクリック (インストール先一式とショートカットを削除)。ダウンロード済みの
+  モデル重みも消すなら `-Cache` を付けて実行
+  (`powershell -ExecutionPolicy Bypass -File packaging\installer\uninstall_local.ps1 -Cache`)
 
 **B. オンラインインストーラー (数十 MB)** — `build-installer.yml`
 
