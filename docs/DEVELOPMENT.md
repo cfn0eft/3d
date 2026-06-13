@@ -84,7 +84,12 @@
   mm 系パッケージは実行時に .py コンフィグを exec するため
   `module_collection_mode="py"` でソースのまま同梱 (旧 exe と同方式)。
   ビルドは `build-exe.yml` (windows-latest、torch cu118 + mmcv 2.1.0 +
-  mmdet 3.2.0 + mmpose 1.3.2 を固定)
+  mmdet 3.2.0 + mmpose 1.3.2 を固定)。ハマりどころ:
+  - torch 2.1 系は NumPy 1.x ビルドのため `packaging/constraints.txt`
+    (`numpy<2`) を `PIP_CONSTRAINT` でジョブ全体に適用している
+  - mmpose の依存 chumpy 0.70 は setup.py が pip を import する壊れた
+    sdist なので、`--no-build-isolation` で先にインストールしている
+    (mmpose 1.x のコードからは import されない残置依存)
 
 ## 旧 Pose3DStudio.exe の技術メモ (参考)
 
