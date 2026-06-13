@@ -185,6 +185,63 @@ def test_collect_vis_output(tmp_path):
     assert not collect_vis_output(vis_dir, video, target)
 
 
+def test_rgb_bytes_from_canvas_strips_alpha():
+    """buffer_rgba の RGBA から行優先 RGB バイト列を作れること。"""
+    from poselab._mpl_compat import _rgb_bytes_from_canvas
+
+    rgba = np.array(
+        [[[10, 20, 30, 255], [40, 50, 60, 128]]], dtype=np.uint8
+    )
+
+    class FakeCanvas:
+        def buffer_rgba(self):
+            return rgba
+
+    out = _rgb_bytes_from_canvas(FakeCanvas())
+    assert out == bytes([10, 20, 30, 40, 50, 60])
+    assert len(out) == rgba.shape[0] * rgba.shape[1] * 3
+
+
+def test_needs_agg_switch_matches_interactive_backends():
+    """対話 Agg 系 (TkAgg 等) は切替対象、純 Agg だけ据え置き。"""
+    from poselab._mpl_compat import _needs_agg_switch
+
+    # 部分文字列 "agg" を含む対話バックエンドも切替対象になること
+    assert _needs_agg_switch("TkAgg")
+    assert _needs_agg_switch("QtAgg")
+    assert _needs_agg_switch("module://ipympl.backend_nbagg")
+    assert _needs_agg_switch("")
+    # 非対話の純 Agg は切替不要
+    assert not _needs_agg_switch("agg")
+    assert not _needs_agg_switch("Agg")
+
+
+def test_ensure_matplotlib_canvas_compat_real_figure():
+    """matplotlib 3.10+ でも tostring_rgb が使え、Agg に切り替わること。"""
+    matplotlib = pytest.importorskip("matplotlib")
+    from poselab._mpl_compat import ensure_matplotlib_canvas_compat
+
+    ensure_matplotlib_canvas_compat()
+    # 部分一致ではなく非対話 Agg そのものへ切り替わっていること
+    assert (matplotlib.get_backend() or "").lower() == "agg"
+
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    assert hasattr(FigureCanvasAgg, "tostring_rgb")
+
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=(2, 2), dpi=10)
+    try:
+        fig.canvas.draw()
+        raw = fig.canvas.tostring_rgb()  # mmpose と同じ呼び出し
+        rgba = np.asarray(fig.canvas.buffer_rgba())
+        assert raw == rgba[..., :3].tobytes()
+        assert len(raw) == rgba.shape[0] * rgba.shape[1] * 3
+    finally:
+        plt.close(fig)
+
+
 def test_run_pose3d_collects_visualization(tmp_path, fake_video):
     class VisWritingFake(FakePose3DInferencer):
         def __call__(self, inputs, **kwargs):

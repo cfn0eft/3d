@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.2 (2026-06-13)
+
+### 修正
+- **MMPose 3D の可視化動画 (`--save-video`) が matplotlib 3.10+ で
+  クラッシュする不具合を修正**。mmpose の 3D 可視化
+  (`local_visualizer_3d`)は matplotlib 3.8 で非推奨化・3.10 で削除された
+  `FigureCanvasAgg.tostring_rgb()` を呼ぶため、新しい matplotlib では
+  `AttributeError: 'FigureCanvasTkAgg' object has no attribute 'tostring_rgb'`
+  で 3D 推定 (`--pose3d --save-video`)が中断していた。削除された
+  `tostring_rgb` を `buffer_rgba` から再現する互換シムを追加し、併せて
+  オフスクリーン描画用の非対話 Agg バックエンドへ切り替えるようにした
+  (`poselab/_mpl_compat.py`)。これにより 2D+3D 可視化動画の出力が
+  matplotlib のバージョンに依存せず動作する
+
 ## 0.9.1 (2026-06-13)
 
 ### 修正
