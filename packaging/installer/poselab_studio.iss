@@ -16,7 +16,9 @@ AppId={{6F9A1C2E-3B7D-4E55-9C1A-POSELABSTUDIO}}
 AppName=PoseLab Studio
 AppVersion={#AppVersion}
 AppPublisher=cfn0eft
-DefaultDirName={autopf}\PoseLab Studio
+; インストール先はスペースを含めない (uv.exe が空白入りパス引数を誤解釈するため)。
+; 表示名・ショートカット名は "PoseLab Studio" のまま。
+DefaultDirName={autopf}\PoseLabStudio
 DefaultGroupName=PoseLab Studio
 DisableProgramGroupPage=yes
 DisableDirPage=no

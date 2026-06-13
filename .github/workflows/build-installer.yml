@@ -58,9 +58,10 @@ jobs:
       - name: Verify online-install recipe (CPU)
         shell: pwsh
         working-directory: packaging/installer
-        # Spaced path on purpose (regression guard for whitespace handling).
+        # No space here: uv.exe mis-parses space-containing path args passed
+        # from PowerShell, so the Inno installer uses a no-space directory.
         run: |
-          ./setup_env.ps1 -InstallDir "$env:RUNNER_TEMP\PoseLab Studio CI2" -Cpu -UvExe "$PWD\uv.exe" -Wheelhouse "$PWD\wheels"
+          ./setup_env.ps1 -InstallDir "$env:RUNNER_TEMP\plstest" -Cpu -UvExe "$PWD\uv.exe" -Wheelhouse "$PWD\wheels"
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
