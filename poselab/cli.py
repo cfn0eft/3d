@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_model.add_argument(
         "--pose2d-model", default=None,
-        help="mmpose の 2D モデル (コンフィグ名/パス。既定: RTMPose-M COCO)",
+        help="mmpose の 2D モデル (コンフィグ名/パス。既定: RTMPose-M AIC+COCO 256x192)",
     )
     g_model.add_argument("--pose2d-weights", default=None, help="2D チェックポイント")
     g_model.add_argument(

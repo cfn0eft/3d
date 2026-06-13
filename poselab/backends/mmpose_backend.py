@@ -26,7 +26,8 @@ from poselab.skeleton import COCO17_EDGES, COCO17_NAMES
 from poselab.types import Keypoint, PersonPose
 
 # 既定モデル (MMPose model zoo のコンフィグ名。重みは metafile から自動解決)
-DEFAULT_POSE2D = "rtmpose-m_simcc-coco_pt-aic-coco_420e-256x192"
+# RTMPose-M (AIC+COCO 事前学習, 256x192)。mmpose>=1.2 の metafile に登録名で存在する。
+DEFAULT_POSE2D = "rtmpose-m_8xb256-420e_aic-coco-256x192"
 ACCURATE_POSE2D = "rtmpose-l_8xb256-420e_aic-coco-384x288"
 
 _INSTALL_HINT = (
