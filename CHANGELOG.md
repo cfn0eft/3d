@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.3 (2026-06-13)
+
+### 修正
+- uv 駆動インストールで、uv のシード版 setuptools に `pkg_resources` が
+  含まれず mmengine の import が `ModuleNotFoundError: No module named
+  'pkg_resources'` で失敗する不具合を修正。venv 作成後に PyPI の
+  setuptools (<81、pkg_resources 同梱) と wheel を入れ直す
+
 ## 0.7.2 (2026-06-13)
 
 ### 変更

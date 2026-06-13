@@ -80,6 +80,12 @@ if (-not (Test-Path $python)) {
     Invoke-Uv @('venv', '--seed', '--python', '3.11', $venv)
 }
 
+# uv's seeded setuptools lacks pkg_resources, which mmengine imports at runtime.
+# Install a real setuptools (<81 still ships pkg_resources) + wheel (needed for
+# chumpy's --no-build-isolation build).
+Write-Step 'Preparing build tools'
+Invoke-Uv @('pip', 'install', 'setuptools<81', 'wheel')
+
 # --- GPU detection ---
 $useGpu = $false
 if ($Gpu) { $useGpu = $true }
