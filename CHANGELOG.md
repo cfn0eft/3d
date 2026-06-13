@@ -2,6 +2,11 @@
 
 ## 0.7.3 (2026-06-13)
 
+### 追加
+- `Install-PoseLabStudio.cmd` が起動時に `git pull` で**自動更新**してから
+  インストールするように変更。毎回手動で pull する必要がなくなった
+  (更新できない場合は現在のバージョンで続行)
+
 ### 修正
 - uv 駆動インストールで、uv のシード版 setuptools に `pkg_resources` が
   含まれず mmengine の import が `ModuleNotFoundError: No module named
