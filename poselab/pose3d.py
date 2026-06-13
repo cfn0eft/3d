@@ -316,6 +316,11 @@ def run_pose3d(
     call_kwargs = {"return_datasamples": False}
     vis_tmp: Optional[Path] = None
     if save_video is not None:
+        # mmpose の 3D 可視化は matplotlib 依存。matplotlib 3.10 で削除された
+        # tostring_rgb を補い、オフスクリーン描画用に Agg へ切り替える。
+        from poselab._mpl_compat import ensure_matplotlib_canvas_compat
+
+        ensure_matplotlib_canvas_compat()
         save_video = Path(save_video)
         vis_tmp = save_video.parent / (save_video.stem + "_mmpose_vis")
         vis_tmp.mkdir(parents=True, exist_ok=True)
