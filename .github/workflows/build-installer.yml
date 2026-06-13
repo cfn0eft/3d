@@ -50,13 +50,16 @@ jobs:
       # ショートカット作成と import まで通す。
       - name: Verify local-install script (CPU)
         shell: pwsh
+        # Use a path WITH a space to catch PIP_CONSTRAINT-style whitespace bugs.
         run: |
-          ./packaging/installer/install_local.ps1 -InstallDir "$env:RUNNER_TEMP\plslocal" -Cpu
+          ./packaging/installer/install_local.ps1 -InstallDir "$env:RUNNER_TEMP\PoseLab Studio CI" -Cpu
 
       # 実機相当の検証 2: uv ベースのオンラインインストールのレシピを CPU で通す。
       - name: Verify online-install recipe (CPU)
         shell: pwsh
         working-directory: packaging/installer
+        # No space here: uv.exe mis-parses space-containing path args passed
+        # from PowerShell, so the Inno installer uses a no-space directory.
         run: |
           ./setup_env.ps1 -InstallDir "$env:RUNNER_TEMP\plstest" -Cpu -UvExe "$PWD\uv.exe" -Wheelhouse "$PWD\wheels"
 
