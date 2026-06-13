@@ -1,0 +1,4 @@
+# Windows のスクリプトは CRLF 改行で配布する (cmd.exe / PowerShell 5.1 が
+# LF だと行を誤読・誤デコードするため)。中身は ASCII に保つこと。
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

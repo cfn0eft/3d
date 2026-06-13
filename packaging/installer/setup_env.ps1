@@ -1,16 +1,19 @@
-# PoseLab Studio オンラインインストーラーのセットアップスクリプト。
+# Setup script for the PoseLab Studio online installer.
 #
-# 小さな配布インストーラー (Inno Setup) からインストール時に呼ばれ、
-# ユーザーのマシン上に専用環境を構築する:
-#   1. uv で専用 Python 3.11 と venv を用意 (システムには触れない)
-#   2. PyTorch を導入 (NVIDIA GPU 検出時は CUDA 11.8 版、無ければ CPU 版)
-#   3. OpenMMLab (mmengine / mmcv / mmdet / mmpose) を mim で導入
-#   4. poselab (同梱 wheel) を導入
-#   5. 動作確認 (mmpose の 3D 推論クラスと GUI 生成を import)
+# Called at install time by the small Inno Setup installer; it provisions a
+# private environment on the user's machine:
+#   1. uv creates a private Python 3.11 + venv (system Python untouched)
+#   2. PyTorch (CUDA 11.8 when an NVIDIA GPU is found, CPU otherwise)
+#   3. OpenMMLab (mmengine / mmcv / mmdet / mmpose) via mim
+#   4. poselab (bundled wheel)
+#   5. import check (mmpose 3D inferencer + GUI builder)
 #
-# CI からは -Cpu を付けてレシピ全体を検証する (tests とは別に実機相当で確認)。
+# CI runs it with -Cpu to validate the whole recipe end to end.
 #
-# 単体実行例:
+# ASCII only on purpose: Windows PowerShell 5.1 misreads UTF-8 (no BOM) files on
+# non-English locales. Keep this file ASCII + CRLF.
+#
+# Example:
 #   pwsh -ExecutionPolicy Bypass -File setup_env.ps1 -InstallDir C:\PoseLabStudio
 
 [CmdletBinding()]
@@ -18,8 +21,8 @@ param(
     [Parameter(Mandatory = $true)][string]$InstallDir,
     [string]$UvExe = (Join-Path $PSScriptRoot 'uv.exe'),
     [string]$Wheelhouse = (Join-Path $PSScriptRoot 'wheels'),
-    [switch]$Cpu,   # CPU 版 PyTorch を強制 (GPU 自動検出を無視)
-    [switch]$Gpu    # CUDA 版 PyTorch を強制
+    [switch]$Cpu,   # force CPU PyTorch (ignore GPU autodetection)
+    [switch]$Gpu    # force CUDA PyTorch
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,18 +33,18 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 $envDir = Join-Path $InstallDir 'env'
 $python = Join-Path $envDir 'Scripts\python.exe'
 
-# 専用 Python とキャッシュを InstallDir 配下に置く (アンインストールで一掃できる)
+# Keep the private Python and caches under InstallDir (so uninstall is clean)
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $InstallDir 'python'
 $env:UV_CACHE_DIR = Join-Path $InstallDir 'uv-cache'
 
-# numpy<2 を全インストールに強制 (torch 2.1 系は NumPy 1.x ビルド)
+# Force numpy<2 everywhere (torch 2.1.x is built against NumPy 1.x)
 $constraints = Join-Path $InstallDir 'constraints.txt'
 Set-Content -Path $constraints -Value 'numpy<2' -Encoding Ascii
-$env:PIP_CONSTRAINT = $constraints   # 後続の pip / mim に効く
+$env:PIP_CONSTRAINT = $constraints   # applies to pip / mim
 
-if (-not (Test-Path $UvExe)) { throw "uv.exe が見つかりません: $UvExe" }
+if (-not (Test-Path $UvExe)) { throw "uv.exe not found: $UvExe" }
 
-# --- GPU 判定 (Cpu/Gpu 指定で上書き) ---
+# --- GPU detection (overridable with -Cpu/-Gpu) ---
 $useGpu = $false
 if ($Gpu) {
     $useGpu = $true
@@ -52,56 +55,54 @@ if ($Gpu) {
     }
 }
 
-# --- 1. 専用 Python 3.11 + venv (pip 同梱) ---
-Write-Step '専用 Python 3.11 と仮想環境を準備'
+# --- 1. Private Python 3.11 + venv (with pip) ---
+Write-Step 'Provisioning private Python 3.11 and a virtual environment'
 & $UvExe venv --seed --python 3.11 $envDir
-if ($LASTEXITCODE -ne 0) { throw '仮想環境の作成に失敗しました' }
+if ($LASTEXITCODE -ne 0) { throw 'Failed to create the virtual environment' }
 
-# 注意: パラメータ名に $Args は使わない (PowerShell の自動変数 $args と衝突し、
-# スプラッティングが空になって `python` が引数なし起動 = 何もせず成功してしまう)
 function Invoke-UvPip([string[]]$PipArgs) {
     & $UvExe pip install --python $python @PipArgs --constraint $constraints
-    if ($LASTEXITCODE -ne 0) { throw ("uv pip install に失敗: " + ($PipArgs -join ' ')) }
+    if ($LASTEXITCODE -ne 0) { throw ("uv pip install failed: " + ($PipArgs -join ' ')) }
 }
 function Invoke-Py([string[]]$PyArgs) {
     & $python @PyArgs
-    if ($LASTEXITCODE -ne 0) { throw ("python 実行に失敗: " + ($PyArgs -join ' ')) }
+    if ($LASTEXITCODE -ne 0) { throw ("python failed: " + ($PyArgs -join ' ')) }
 }
 
-# --- 2. PyTorch (大きいので uv の高速・レジューム対応 DL を使う) ---
+# --- 2. PyTorch (large; use uv's fast, resumable download) ---
 if ($useGpu) {
-    Write-Step 'NVIDIA GPU を検出 → CUDA 11.8 版 PyTorch を導入 (約2GB)'
+    Write-Step 'NVIDIA GPU detected - installing CUDA 11.8 PyTorch (about 2GB)'
     $torchIndex = 'https://download.pytorch.org/whl/cu118'
 } else {
-    Write-Step 'GPU 未検出 → CPU 版 PyTorch を導入 (軽量・約200MB)'
+    Write-Step 'No GPU detected - installing CPU PyTorch (lightweight, ~200MB)'
     $torchIndex = 'https://download.pytorch.org/whl/cpu'
 }
 Invoke-UvPip @('torch==2.1.2', 'torchvision==0.16.2', '--index-url', $torchIndex)
 
-# --- 3. chumpy (mmpose の依存。壊れた sdist 対策で分離ビルドを無効化) ---
-Write-Step 'mmpose の依存 (chumpy) を導入'
+# --- 3. chumpy (mmpose dependency; broken sdist needs no build isolation) ---
+Write-Step 'Installing mmpose dependency (chumpy)'
 Invoke-Py @('-m', 'pip', 'install', '--no-input', 'scipy')
 Invoke-Py @('-m', 'pip', 'install', '--no-input', 'chumpy==0.70', '--no-build-isolation')
 
-# --- 4. OpenMMLab (mim が torch の CUDA/CPU に合う mmcv を自動選択) ---
-Write-Step 'OpenMMLab (mmengine / mmcv / mmdet / mmpose) を導入'
+# --- 4. OpenMMLab (mim picks the mmcv matching torch CUDA/CPU) ---
+Write-Step 'Installing OpenMMLab (mmengine / mmcv / mmdet / mmpose)'
 Invoke-Py @('-m', 'pip', 'install', '--no-input', '-U', 'openmim')
 Invoke-Py @('-m', 'mim', 'install', 'mmengine', 'mmcv==2.1.0', 'mmdet==3.2.0', 'mmpose==1.3.2')
 
-# --- 5. poselab (同梱 wheel) ---
-Write-Step 'poselab を導入'
+# --- 5. poselab (bundled wheel) ---
+Write-Step 'Installing poselab'
 $wheel = Get-ChildItem -Path $Wheelhouse -Filter 'poselab_toolkit-*.whl' -ErrorAction SilentlyContinue |
     Select-Object -First 1
-if (-not $wheel) { throw "poselab の wheel が $Wheelhouse に見つかりません" }
+if (-not $wheel) { throw "poselab wheel not found in $Wheelhouse" }
 Invoke-UvPip @($wheel.FullName)
 
-# --- 6. 動作確認 ---
-Write-Step 'セットアップの動作確認'
+# --- 6. Sanity check ---
+Write-Step 'Verifying the setup'
 Invoke-Py @('-c', 'import poselab; from poselab.studio import build_app_js; from poselab.studio.server import gpu_info; from mmpose.apis.inferencers import Pose3DInferencer; print("PoseLab Studio env OK:", poselab.__version__)')
 
 Write-Host ''
-Write-Host 'セットアップが完了しました。' -ForegroundColor Green
+Write-Host 'Setup complete.' -ForegroundColor Green
 if (-not $useGpu) {
-    Write-Host '(GPU 未検出のため CPU で動作します。NVIDIA GPU 搭載機で再インストールすると CUDA 版になります)' -ForegroundColor Yellow
+    Write-Host '  (No GPU detected: running on CPU. Re-run on an NVIDIA GPU machine for CUDA.)' -ForegroundColor Yellow
 }
 exit 0

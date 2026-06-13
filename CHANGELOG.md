@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.4 (2026-06-13)
+
+### 修正
+- インストールスクリプト (`install_local.ps1` / `setup_env.ps1` /
+  `Install-PoseLabStudio.cmd`) が**日本語 Windows で文字化けして構文エラーに
+  なる / cmd が行を誤読する**不具合を修正。原因は UTF-8 (BOM なし) + LF 改行で、
+  Windows PowerShell 5.1 がロケールの ANSI コードページとして誤デコードし、
+  cmd.exe が LF を誤読していた (例: `powershell` が `ershell` に化ける)
+  - スクリプトを **ASCII (英語メッセージ)** に統一し、`.gitattributes` で
+    `*.cmd` / `*.ps1` を **CRLF 改行**に固定。文字コード依存を排除
+  - venv に `wheel` を先に入れて chumpy の `--no-build-isolation` ビルドを通す
+    (0.6.3 から継続)
+
 ## 0.6.3 (2026-06-13)
 
 ### 追加
