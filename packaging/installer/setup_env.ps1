@@ -53,7 +53,8 @@ $env:UV_CACHE_DIR = Join-Path $InstallDir 'uv-cache'
 # Force numpy<2 everywhere (torch 2.1.x is built against NumPy 1.x)
 $constraints = Join-Path $InstallDir 'constraints.txt'
 Set-Content -Path $constraints -Value 'numpy<2' -Encoding Ascii -ErrorAction Stop
-$env:PIP_CONSTRAINT = $constraints   # applies to pip / mim
+# Pass --constraint as an argument, never via $env:PIP_CONSTRAINT (pip splits
+# that on whitespace, breaking install paths that contain a space).
 
 if (-not (Test-Path $UvExe)) { throw "uv.exe not found: $UvExe" }
 
@@ -94,12 +95,12 @@ Invoke-UvPip @('torch==2.1.2', 'torchvision==0.16.2', '--index-url', $torchIndex
 
 # --- 3. chumpy (mmpose dependency; broken sdist needs no build isolation) ---
 Write-Step 'Installing mmpose dependency (chumpy)'
-Invoke-Py @('-m', 'pip', 'install', '--no-input', 'scipy')
-Invoke-Py @('-m', 'pip', 'install', '--no-input', 'chumpy==0.70', '--no-build-isolation')
+Invoke-Py @('-m', 'pip', 'install', '--no-input', 'scipy', '--constraint', $constraints)
+Invoke-Py @('-m', 'pip', 'install', '--no-input', 'chumpy==0.70', '--no-build-isolation', '--constraint', $constraints)
 
 # --- 4. OpenMMLab (mim picks the mmcv matching torch CUDA/CPU) ---
 Write-Step 'Installing OpenMMLab (mmengine / mmcv / mmdet / mmpose)'
-Invoke-Py @('-m', 'pip', 'install', '--no-input', '-U', 'openmim')
+Invoke-Py @('-m', 'pip', 'install', '--no-input', '-U', 'openmim', '--constraint', $constraints)
 Invoke-Py @('-m', 'mim', 'install', 'mmengine', 'mmcv==2.1.0', 'mmdet==3.2.0', 'mmpose==1.3.2')
 
 # --- 5. poselab (bundled wheel) ---

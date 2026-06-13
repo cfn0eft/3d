@@ -88,10 +88,12 @@ if (-not (Test-Path $python)) {
 # Force numpy<2 for every install (torch 2.1.x is built against NumPy 1.x)
 $constraints = Join-Path $InstallDir 'constraints.txt'
 Set-Content -Path $constraints -Value 'numpy<2' -Encoding Ascii -ErrorAction Stop
-$env:PIP_CONSTRAINT = $constraints
 
+# Pass the constraint as an argument, NOT via $env:PIP_CONSTRAINT: pip splits
+# that env var on whitespace, so an install path with a space (e.g.
+# "...\PoseLab Studio\constraints.txt") would be read as two broken paths.
 function Invoke-Pip([string[]]$PipArgs) {
-    & $python -m pip install --no-input @PipArgs 2>&1 | Out-Host
+    & $python -m pip install --no-input @PipArgs --constraint $constraints 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) { throw ("pip install failed: " + ($PipArgs -join ' ')) }
 }
 

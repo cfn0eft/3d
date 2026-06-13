@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.1 (2026-06-13)
+
+### 修正
+- インストール先パスにスペースが含まれる (既定の
+  `%LOCALAPPDATA%\PoseLab Studio` 等) と pip が
+  `Could not open requirements file: ...\PoseLab` で失敗する不具合を修正。
+  原因は **`PIP_CONSTRAINT` 環境変数が空白で分割される**仕様で、制約ファイルの
+  パスが途中で切れていた
+  - `install_local.ps1` / `setup_env.ps1` とも、制約は環境変数ではなく
+    `--constraint <file>` 引数で渡すように変更 (引数なら空白入りパスでも
+    1 つの値として正しく渡る)
+  - CI の検証をスペース入りパスで実行するようにして、この種の回帰を検出
+
 ## 0.7.0 (2026-06-13)
 
 ### 変更 (デザイン刷新)
