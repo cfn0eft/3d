@@ -1,0 +1,4 @@
+# 配布版 exe ビルド用の pip 制約 (build-exe.yml が PIP_CONSTRAINT で適用)。
+# torch 2.1 系は NumPy 1.x でビルドされているため、2.x の混入を禁止する
+# (混ざると import 時に ABI エラーになる)。
+numpy<2
