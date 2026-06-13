@@ -47,19 +47,21 @@ def build_single_html() -> str:
     """CSS / JS をインライン展開した自己完結 HTML を返す。"""
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     css = (STATIC_DIR / "app.css").read_text(encoding="utf-8")
-    js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     html = re.sub(
         r'<link rel="stylesheet" href="\./app\.css"\s*/?>',
         lambda _: f"<style>\n{css}\n</style>",
         html,
         count=1,
     )
-    html = re.sub(
-        r'<script src="\./app\.js"></script>',
-        lambda _: f"<script>\n{js}\n</script>",
-        html,
-        count=1,
-    )
+    # engine.js → app.js の読み込み順を保ったままインライン化する
+    for name in ("engine.js", "app.js"):
+        js = (STATIC_DIR / name).read_text(encoding="utf-8")
+        html = re.sub(
+            rf'<script src="\./{re.escape(name)}"></script>',
+            lambda _: f"<script>\n{js}\n</script>",
+            html,
+            count=1,
+        )
     return html
 
 

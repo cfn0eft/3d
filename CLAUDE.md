@@ -38,14 +38,15 @@ poselab-studio deploy <exe>/_internal/gui           # exe へ配備 (要 F5)
 
 - **PR のベースは必ず `main`**。スタック PR (ベース=フィーチャーブランチ) は
   マージしても main に入らない事故が実際に起きた (#9 → 回収 #10)
-- **3D エンジンのソースは `poselab/webviewer/static/app.js` だけ**。
-  「アプリ」セクション見出しより前がエンジン部で、`poselab-studio build` が
-  そこを切り出して exe 用 app.js を生成する。エンジンを編集したら
-  `poselab-studio deploy` で exe にも反映する。見出しマーカーを変えるときは
-  `poselab/studio/__init__.py` の `ENGINE_END_MARKER` と
-  `tests/test_studio.py` も更新
-- **CHANGELOG.md とバージョン** (pyproject.toml + `poselab/__init__.py`) を
-  機能追加のたびに更新。コミットメッセージは英語タイトル + 詳細本文
+- **3D エンジンのソースは `poselab/webviewer/static/engine.js` だけ**。
+  ビューア (index.html が engine.js → app.js の順に読み込む) と
+  Pose3DStudio GUI (`poselab-studio build` が IIFE で包んで連結) の共通
+  ソース。エンジンを編集したら Node スモーク
+  (`pytest tests/test_engine_js.py`) を回し、`poselab-studio deploy` で
+  exe にも反映する
+- **CHANGELOG.md とバージョン** (`poselab/__init__.py` の `__version__` が
+  唯一のソース。pyproject.toml は dynamic 参照) を機能追加のたびに更新。
+  コミットメッセージは英語タイトル + 詳細本文
 - ビューア/GUI の文言・ドキュメントは日本語
 
 ## 座標規約 (3D 表示で迷ったら)
@@ -58,8 +59,10 @@ poselab-studio deploy <exe>/_internal/gui           # exe へ配備 (要 F5)
 
 - mmpose / GPU は CI に無い → `tests/test_mmpose_backend.py` /
   `tests/test_pose3d.py` はフェイク inferencer 注入でロジックを検証
-- ブラウザ側 (app.js) は Python テスト対象外。変更したら実ブラウザで
-  デモ (`?demo=1`) とエクスポートのラウンドトリップを確認
+- 3D エンジン (engine.js) のパース / エクスポートは Node スモークテスト
+  (`tests/engine_smoke.mjs`。pytest から自動実行、node 無しはスキップ) で
+  ラウンドトリップを検証。PoseStage の描画と UI 配線 (app.js /
+  app_main.js) は実ブラウザでデモ (`?demo=1`) を確認
 - mmpose の実 API 仕様が必要なら Pose3DStudio.exe の
   `_internal/mmpose/` に同梱ソースがある (ユーザーのマシン上)
 

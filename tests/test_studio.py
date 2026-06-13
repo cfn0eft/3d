@@ -6,14 +6,13 @@ import pytest
 
 from poselab.studio import (
     DEPLOY_FILES,
-    ENGINE_END_MARKER,
     ENGINE_SOURCE,
     GUI_DIR,
     build,
     build_app_js,
     deploy,
-    extract_engine,
     main,
+    read_engine,
 )
 
 
@@ -22,23 +21,19 @@ def test_sources_exist():
         path = GUI_DIR / name
         assert path.is_file(), name
         assert path.stat().st_size > 1000, name
+    # エンジンはビューアと共通の engine.js (唯一のソース)
     assert ENGINE_SOURCE.is_file()
+    assert ENGINE_SOURCE.name == "engine.js"
 
 
-def test_engine_marker_present_in_viewer_source():
-    # ビューア側 app.js の「アプリ」マーカーはビルドの前提。
-    # マーカーを変更する場合は poselab/studio も合わせて更新すること。
-    assert ENGINE_END_MARKER in ENGINE_SOURCE.read_text(encoding="utf-8")
-
-
-def test_extract_engine_contains_core_symbols():
-    engine = extract_engine()
+def test_engine_contains_core_symbols():
+    engine = read_engine()
     for symbol in ("class PoseStage", "function parseAny", "function demoModel",
                    "function collectExport", "EXPORT_FORMATS"):
         assert symbol in engine, symbol
-    # アプリ配線は含まれない
-    assert "アプリ" not in engine.split("エクスポート")[-1] or True
+    # ビューアのアプリ配線 (app.js 側) は含まれない
     assert 'new PoseStage($("stage-canvas"))' not in engine
+    assert "getElementById" not in engine.split("*/", 1)[1]
 
 
 def test_build_app_js_structure():

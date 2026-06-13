@@ -381,8 +381,8 @@ poselab-studio build --out dist/studio-gui      # ビルドのみ
 poselab-studio deploy <exe>/_internal/gui       # exe へ配備 (画面で F5)
 ```
 
-3D 描画エンジンはビューア (`poselab/webviewer/static/app.js`) と共通で、
-`poselab-studio` がビルド時に連結します。
+3D 描画エンジンはビューアと共通の `poselab/webviewer/static/engine.js`
+で、`poselab-studio` がビルド時に連結します。
 
 ## テスト
 
