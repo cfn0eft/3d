@@ -11,12 +11,16 @@
    推定 CLI・Tkinter GUI (`poselab/`)
 2. **ブラウザ 3D ビューア** — `poselab/webviewer/static/` (依存ゼロ、
    https://cfn0eft.github.io/3d/ に Pages 自動デプロイ)
-3. **Pose3DStudio GUI** — ユーザーのデスクトップアプリ Pose3DStudio.exe の
-   Web GUI ソース (`poselab/studio/gui/`)。`poselab-studio deploy` で exe へ配備
+3. **PoseLab Studio** — Pose3DStudio 後継のジョブ管理 Web GUI。
+   `poselab-studio` でローカル起動 (GUI: `poselab/studio/gui/`、
+   サーバー: `poselab/studio/server.py`)。Windows 配布版 exe は
+   `build-exe.yml` ワークフローが CUDA 同梱で CI ビルドする
+   (`packaging/`)。旧 exe への `poselab-studio deploy` はレガシー
 
-このリポジトリは Pose3DStudio.exe (mmpose ベースの GPU パイプライン、
+このリポジトリは旧 Pose3DStudio.exe (mmpose ベースの GPU パイプライン、
 ソース非公開のビルド済み exe) の機能を「公開 API を使った独自実装」として
-移植してきた経緯がある。**コードはすべて独自実装、コピー禁止**の方針。
+移植してきた経緯があり、v0.6.0 で GUI + exe ビルドまで完全移設した。
+**コードはすべて独自実装、コピー禁止**の方針。
 
 ## よく使うコマンド
 
@@ -29,10 +33,14 @@ python -m build                         # パッケージビルド
 poselab-viewer                          # ビューアをローカル起動
 poselab-viewer --export-html out.html   # 自己完結 HTML
 
-poselab-studio build --out dist/studio-gui          # exe GUI をビルド
-poselab-studio deploy <exe>/_internal/gui           # exe へ配備 (要 F5)
+poselab-studio                          # Studio GUI をローカル起動 (要 mmpose)
+poselab-studio build --out dist/studio-gui          # GUI 一式をビルド
+poselab-studio deploy <exe>/_internal/gui           # 旧 exe へ配備 (レガシー)
 # 配備先は環境変数 POSE3DSTUDIO_GUI でも指定可
 ```
+
+配布版 exe は GitHub Actions「Build Windows exe (PoseLab Studio)」を
+手動実行 (または vX.Y.Z タグ push) → Artifacts の zip。
 
 ## 絶対に守ること
 
@@ -58,7 +66,8 @@ poselab-studio deploy <exe>/_internal/gui           # exe へ配備 (要 F5)
 ## テスト方針
 
 - mmpose / GPU は CI に無い → `tests/test_mmpose_backend.py` /
-  `tests/test_pose3d.py` はフェイク inferencer 注入でロジックを検証
+  `tests/test_pose3d.py` はフェイク inferencer 注入、
+  `tests/test_studio_server.py` はフェイクのジョブコマンド注入で検証
 - 3D エンジン (engine.js) のパース / エクスポートは Node スモークテスト
   (`tests/engine_smoke.mjs`。pytest から自動実行、node 無しはスキップ) で
   ラウンドトリップを検証。PoseStage の描画と UI 配線 (app.js /

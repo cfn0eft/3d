@@ -1,25 +1,31 @@
-"""Pose3DStudio (デスクトップ版) GUI のビルドと配備。
+"""Pose3DStudio 後継 GUI の起動と、GUI 一式のビルド / 配備。
 
-起動: poselab-studio  (または python -m poselab.studio)
+起動: poselab-studio  (または poselab-studio serve / python -m poselab.studio)
 
-Pose3DStudio.exe は `_internal/gui/` の index.html / app.css / app.js を
-ディスクから配信するため、この 3 ファイルを差し替えるだけで GUI を
-更新できます (exe の再ビルド不要)。このモジュールはその 3 ファイルを
-リポジトリ内のソースからビルドし、exe のフォルダへ配備します。
+サブコマンド:
+- serve  : Web GUI をローカルサーバーで起動 (引数なしの既定。
+           poselab 自身のパイプラインで推定する。旧 exe は不要)
+- build  : GUI 一式 (index.html / app.css / app.js) をフォルダへ書き出す
+- deploy : 旧 Pose3DStudio.exe の `_internal/gui` へ配備する (レガシー。
+           exe はこの 3 ファイルをディスクから配信するため差し替えだけで
+           GUI を更新できる)
 
 ソース構成 (このリポジトリが唯一のソース):
 - 3D エンジン  : poselab/webviewer/static/engine.js
                  (ビューアと共通。二重管理しない)
 - GUI 本体     : poselab/studio/gui/app_main.js
 - HTML / CSS   : poselab/studio/gui/index.html, app.css
+- サーバー     : poselab/studio/server.py (GUI が叩く API の独自実装)
 
 ビルドは エンジンを IIFE (window.PoseLab3D) で包み、app_main.js を
 連結して app.js を生成します。
 
 使い方:
+    poselab-studio                       # GUI を起動 (serve と同じ)
+    poselab-studio serve --port 7860
     poselab-studio build --out dist/studio-gui
     poselab-studio deploy "C:\\path\\to\\Pose3DStudio\\_internal\\gui"
-    # 環境変数 POSE3DSTUDIO_GUI を設定すればパス省略可
+    # deploy の配備先は環境変数 POSE3DSTUDIO_GUI でも指定可
 """
 
 from __future__ import annotations
@@ -105,14 +111,24 @@ def default_target() -> Optional[str]:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    # 引数なし、または serve はサーバー起動 (オプションは server 側で解釈)
+    if not args_list or args_list[0] == "serve":
+        from poselab.studio.server import main_serve
+
+        rest = args_list[1:] if args_list else []
+        return main_serve(rest)
+
     parser = argparse.ArgumentParser(
         prog="poselab-studio",
         description=(
-            "Pose3DStudio (デスクトップ版) の GUI をリポジトリのソースから"
-            "ビルド / 配備します。"
+            "Pose3DStudio 後継の Web GUI を起動 / ビルド / 配備します。"
+            "引数なし (または serve) で GUI を起動します。"
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("serve", help="Web GUI をローカルサーバーで起動する (既定)")
 
     p_build = sub.add_parser("build", help="GUI 一式をフォルダへ書き出す")
     p_build.add_argument(

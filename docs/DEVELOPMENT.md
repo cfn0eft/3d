@@ -16,15 +16,18 @@
 │   ├ webviewer/       ブラウザ 3D ビューア (poselab-viewer)       │
 │   │   ├ static/engine.js ★3D エンジンの唯一のソース★            │
 │   │   └ static/app.js    ビューアの UI 配線                      │
-│   └ studio/          Pose3DStudio.exe の GUI ソースとビルダー    │
+│   └ studio/          PoseLab Studio (Pose3DStudio 後継 GUI)      │
 │       ├ gui/         index.html / app.css / app_main.js          │
-│       └ __init__.py  poselab-studio build/deploy                 │
+│       ├ server.py    GUI が叩く API の独自実装 (poselab-studio)  │
+│       └ __init__.py  serve / build / deploy                      │
 │                                                                  │
+│  packaging/          配布版 exe (entry + PyInstaller spec)       │
+│  .github/workflows/build-exe.yml  CUDA 同梱 exe の CI ビルド     │
 └──────────────────────────────────────────────────────────────────┘
-          │ Pages 自動デプロイ                 │ poselab-studio deploy
-          ▼                                    ▼
-  https://cfn0eft.github.io/3d/        Pose3DStudio.exe\_internal\gui\
-  (公開ビューア)                        (ユーザーのデスクトップアプリ)
+     │ Pages 自動デプロイ        │ poselab-studio serve   │ CI ビルド
+     ▼                           ▼                        ▼
+  https://cfn0eft.github.io/3d/  ローカル Web GUI   PoseLabStudio-win64.zip
+  (公開ビューア)                 (pip 環境で起動)   (解凍するだけの配布版)
 ```
 
 ## 経緯 (なぜこうなっているか)
@@ -40,9 +43,10 @@
     exe GUI ソースの本リポジトリへの収容 (`poselab/studio/`)
   - v0.5.1: エンジンを engine.js に物理分割 (マーカー切り出しを廃止)、
     Node スモークテスト追加、バージョンの単一ソース化
-- exe 自体は残っているが、GUI は本リポジトリからビルド・配備する。
-  将来的には PyInstaller ビルドを CI 化して exe 自体をリポジトリから
-  生成するのがロードマップの最終形
+  - v0.6.0: **完全移設**。GUI を poselab パイプラインへ接続するサーバー
+    (`studio/server.py`) を実装し、CUDA 同梱の配布版 exe を CI ビルド化
+    (`packaging/` + `build-exe.yml`)。旧 exe は不要になった
+- 旧 exe への配備 (`poselab-studio deploy`) はレガシーとして残している
 
 ## 3D エンジンの単一ソース運用
 
@@ -63,7 +67,26 @@
   実行) が「デモ生成 → 全形式エクスポート → 再パース」のラウンドトリップを
   CI で検証する。PoseStage の描画だけは実ブラウザで確認する
 
-## Pose3DStudio.exe の技術メモ (ユーザー環境)
+## PoseLab Studio (GUI サーバーと配布版 exe)
+
+- `poselab-studio` (= `serve`) が `studio/server.py` のローカルサーバーを
+  起動し、GUI (`studio/gui/`) を配信する。GUI が叩く API
+  (`/run /enqueue /status /events /preflight /file /summary /open
+  /pick-video /pick-videos /pick-folder /queue-move /clear-queue /cancel
+  /gpu`) は旧 exe と同じ契約で、`server.py` がすべて独自実装している
+- ジョブは poselab CLI (`--pose3d`) の**サブプロセス**として 1 件ずつ実行
+  (キャンセル = プロセス終了、GPU メモリもジョブごとに解放)。進捗は
+  ProgressReporter の出力から % を拾って SSE で流す
+- GUI のモデル / 検出器プロファイルが送る旧 exe 内のコンフィグパスは
+  `config_to_model_name()` が model zoo のモデル名へ読み替える
+- 配布版 exe: `packaging/studio_entry.py` (引数なし=serve、`--cli`=CLI、
+  `--selftest`=自己診断) を `packaging/poselab_studio.spec` で固める。
+  mm 系パッケージは実行時に .py コンフィグを exec するため
+  `module_collection_mode="py"` でソースのまま同梱 (旧 exe と同方式)。
+  ビルドは `build-exe.yml` (windows-latest、torch cu118 + mmcv 2.1.0 +
+  mmdet 3.2.0 + mmpose 1.3.2 を固定)
+
+## 旧 Pose3DStudio.exe の技術メモ (参考)
 
 - 起動するとローカル HTTP サーバー (既定 7860、塞がっていれば 7861…) で
   GUI を配信し、ブラウザ/ウィンドウを開く
@@ -122,7 +145,11 @@ poselab --info    # mmpose の検出状況を確認
 
 ## ロードマップ
 
-- [ ] Web GUI 統合 (`poselab-web`): Pose3DStudio 風のジョブ管理 UI を
-      poselab のパイプラインに接続 (studio/gui がベースになる)
-- [ ] PyInstaller ビルドの CI 化 — exe をリポジトリから生成して完全移設
+- [x] Web GUI 統合: Pose3DStudio 風のジョブ管理 UI を poselab の
+      パイプラインに接続 (v0.6.0 `poselab-studio serve`)
+- [x] PyInstaller ビルドの CI 化 — exe をリポジトリから生成して完全移設
+      (v0.6.0 `build-exe.yml`)
+- [ ] モデル重みの事前ダウンロードと GUI「Downloads」パネルへの進捗表示
+      (現状は mmpose 任せで進捗が出ない)
+- [ ] 配布 exe を GitHub Release に添付 (現状は Actions Artifacts のみ)
 - [ ] mmpose バックエンドの GPU 実機スモークの定期実行

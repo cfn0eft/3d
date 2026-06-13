@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.0 (2026-06-13)
+
+### 追加
+- **Pose3DStudio 後継のスタンドアロン GUI** (`poselab-studio` で起動):
+  旧 exe と同じ Web GUI (ジョブキュー / 進捗 / 出力プレビュー / 3D
+  ビューア / モデルプロファイル) を、poselab 自身のパイプライン
+  (mmpose 2D + 3D リフティング = `--pose3d` 相当) へ接続するローカル
+  サーバーを独自実装 (`poselab/studio/server.py`)。旧 exe は不要
+  - SSE でログ / 進捗 / 出力をライブ配信、複数動画のキュー処理と並べ替え、
+    キャンセル、実行前チェック (preflight)、ネイティブのファイル選択
+    ダイアログ、出力フォルダ / 動画を開く、results JSON のサマリ表示
+  - 旧 GUI が送るモデル / 検出器プロファイル (exe 内のコンフィグパス) は
+    MMPose / MMDetection model zoo のモデル名へ自動で読み替え
+  - center_root / normalize_scale は CSV の world 座標に適用して書き出す
+    (関節 0 = root を原点へ移動 / 原点からの最大距離を 1 にスケール)
+  - GPU は自動検出 (torch → nvidia-smi の順)。無ければ CPU で実行
+- **Windows 配布版 exe の CI ビルド** (`.github/workflows/build-exe.yml` +
+  `packaging/`): CUDA 11.8 版 PyTorch・OpenMMLab 一式・poselab を
+  PyInstaller で同梱した `PoseLabStudio-win64-cuda118.zip` を生成
+  (手動実行または vX.Y.Z タグ push で起動、Actions Artifacts に 30 日保存)
+  - 解凍して `PoseLabStudio.exe` を起動するだけ。Python や依存関係の
+    インストールは不要 (モデルの重みのみ初回使用時に自動ダウンロード)
+  - GPU ドライバ 452 以降で CUDA 実行、無ければ自動で CPU 実行
+  - `PoseLabStudio.exe --selftest` で同梱物を自己診断 (CI でも実行)
+  - `PoseLabStudio.exe --cli ...` は poselab CLI として動作
+    (サーバーがジョブ実行に内部使用)
+
 ## 0.5.1 (2026-06-12)
 
 ### 変更 (内部構成の再編。機能・出力は変わらない)
