@@ -42,6 +42,21 @@ VIDEO_EXTENSIONS = (
 
 DEFAULT_PORT = 7860
 
+
+def force_utf8_stdio() -> None:
+    """stdout / stderr を UTF-8 にする (日本語ログが cp1252 で落ちるのを防ぐ)。
+
+    Windows のコンソール既定 (cp1252 等) では日本語を含む print が
+    UnicodeEncodeError になる。frozen exe / cmd.exe いずれでも安全なよう、
+    エンコード不能文字は置換する。
+    """
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
 # GUI の MODEL_PROFILES / DETECTOR_PROFILES は旧 exe 内のコンフィグパスを
 # 送ってくる。パス末尾のコンフィグ名は MMPose / MMDetection model zoo の
 # 名前なので、そのままモデル名として解決できる (例外はここで読み替える)。
@@ -1001,6 +1016,8 @@ def serve(
 def main_serve(argv: Optional[Sequence[str]] = None) -> int:
     """`poselab-studio serve` の本体。"""
     import argparse
+
+    force_utf8_stdio()
 
     parser = argparse.ArgumentParser(
         prog="poselab-studio serve",

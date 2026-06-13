@@ -63,6 +63,10 @@ def selftest() -> int:
 
 def main() -> int:
     multiprocessing.freeze_support()  # Windows の frozen 環境では必須
+    # 日本語ログ / 診断出力が Windows コンソール (cp1252) で落ちないよう UTF-8 に
+    from poselab.studio.server import force_utf8_stdio
+
+    force_utf8_stdio()
     argv = sys.argv[1:]
     if argv[:1] == ["--cli"]:
         from poselab.cli import main as cli_main
