@@ -5,7 +5,7 @@
 """
 
 # パッケージ版数の唯一のソース (pyproject.toml が dynamic version で参照)
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 
 from poselab.types import FrameResult, Keypoint, PersonPose, WorldKeypoint
 

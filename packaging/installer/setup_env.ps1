@@ -57,13 +57,15 @@ Write-Step '専用 Python 3.11 と仮想環境を準備'
 & $UvExe venv --seed --python 3.11 $envDir
 if ($LASTEXITCODE -ne 0) { throw '仮想環境の作成に失敗しました' }
 
+# 注意: パラメータ名に $Args は使わない (PowerShell の自動変数 $args と衝突し、
+# スプラッティングが空になって `python` が引数なし起動 = 何もせず成功してしまう)
 function Invoke-UvPip([string[]]$PipArgs) {
     & $UvExe pip install --python $python @PipArgs --constraint $constraints
     if ($LASTEXITCODE -ne 0) { throw ("uv pip install に失敗: " + ($PipArgs -join ' ')) }
 }
-function Invoke-Py([string[]]$Args) {
-    & $python @Args
-    if ($LASTEXITCODE -ne 0) { throw ("python 実行に失敗: " + ($Args -join ' ')) }
+function Invoke-Py([string[]]$PyArgs) {
+    & $python @PyArgs
+    if ($LASTEXITCODE -ne 0) { throw ("python 実行に失敗: " + ($PyArgs -join ' ')) }
 }
 
 # --- 2. PyTorch (大きいので uv の高速・レジューム対応 DL を使う) ---
