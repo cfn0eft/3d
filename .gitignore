@@ -8,3 +8,9 @@ venv/
 *.task
 output/
 .cache/
+
+# 配布物のビルド成果物 (CI で生成)
+dist-exe/
+packaging/installer/Output/
+packaging/installer/wheels/
+packaging/installer/uv.exe
