@@ -79,12 +79,20 @@
   ProgressReporter の出力から % を拾って SSE で流す
 - GUI のモデル / 検出器プロファイルが送る旧 exe 内のコンフィグパスは
   `config_to_model_name()` が model zoo のモデル名へ読み替える
-- 配布版 exe: `packaging/studio_entry.py` (引数なし=serve、`--cli`=CLI、
-  `--selftest`=自己診断) を `packaging/poselab_studio.spec` で固める。
-  mm 系パッケージは実行時に .py コンフィグを exec するため
-  `module_collection_mode="py"` でソースのまま同梱 (旧 exe と同方式)。
-  ビルドは `build-exe.yml` (windows-latest、torch cu118 + mmcv 2.1.0 +
-  mmdet 3.2.0 + mmpose 1.3.2 を固定)。ハマりどころ:
+- 配布物は 2 系統:
+  - **オンラインインストーラー (推奨)**: `packaging/installer/`。小さな
+    `PoseLabStudioSetup.exe` (Inno Setup) が `setup_env.ps1` を実行し、
+    `uv` で専用 Python + PyTorch (GPU 自動判定で cu118 / cpu) + mmpose +
+    poselab (同梱 wheel) を**ユーザーのマシンに構築**する。`build-installer.yml`
+    が CI でビルドし、その前に**CPU レシピを実機相当で最後まで実行**して
+    検証する (Linux ではローカル検証できないため、これが回帰の砦)。
+    タグ時は GitHub Release に添付
+  - **同梱 zip (オフライン用)**: `packaging/studio_entry.py` (引数なし=serve、
+    `--cli`=CLI、`--selftest`=自己診断) を `packaging/poselab_studio.spec`
+    で固める。mm 系は実行時に .py コンフィグを exec するため
+    `module_collection_mode="py"` でソースのまま同梱 (旧 exe と同方式)
+- どちらも windows / torch cu118(or cpu)/ mmcv 2.1.0 / mmdet 3.2.0 /
+  mmpose 1.3.2 を固定。共通のハマりどころ:
   - torch 2.1 系は NumPy 1.x ビルドのため `packaging/constraints.txt`
     (`numpy<2`) を `PIP_CONSTRAINT` でジョブ全体に適用している
   - mmpose の依存 chumpy 0.70 は setup.py が pip を import する壊れた
@@ -154,7 +162,8 @@ poselab --info    # mmpose の検出状況を確認
       パイプラインに接続 (v0.6.0 `poselab-studio serve`)
 - [x] PyInstaller ビルドの CI 化 — exe をリポジトリから生成して完全移設
       (v0.6.0 `build-exe.yml`)
+- [x] 軽量なオンラインインストーラー (v0.6.1 `build-installer.yml` +
+      `packaging/installer/`)。GPU 自動判定・タグ時 Release 添付
 - [ ] モデル重みの事前ダウンロードと GUI「Downloads」パネルへの進捗表示
       (現状は mmpose 任せで進捗が出ない)
-- [ ] 配布 exe を GitHub Release に添付 (現状は Actions Artifacts のみ)
 - [ ] mmpose バックエンドの GPU 実機スモークの定期実行

@@ -13,7 +13,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/build-exe.yml"
-      - "packaging/**"
+      - "packaging/poselab_studio.spec"
+      - "packaging/studio_entry.py"
 
 jobs:
   build-exe:

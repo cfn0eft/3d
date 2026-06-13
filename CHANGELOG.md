@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.1 (2026-06-13)
+
+### 追加
+- **オンラインインストーラー** (`PoseLabStudioSetup.exe`、数十 MB):
+  巨大な同梱 exe (約2.85GB) のダウンロードを避け、小さなインストーラーが
+  実行時に必要なものを構築する方式 (`packaging/installer/`)
+  - `uv` で専用 Python 3.11 と仮想環境を用意 (システムの Python に触れない)
+  - **NVIDIA GPU を自動判定**: 搭載機は CUDA 11.8 版 PyTorch、非搭載機は
+    CPU 版 (約200MB) を選択。mmcv も torch に合わせて mim が自動選択
+  - mmpose 一式と poselab (同梱 wheel) を導入し、import 動作確認まで実施
+  - スタートメニュー / デスクトップにショートカット、アンインストーラ付き
+  - 取得は PyPI / PyTorch の高速 CDN 経由でレジューム可。`uv` がキャッシュ
+  - `.github/workflows/build-installer.yml` が CI でビルド。実機検証として
+    **CPU レシピを最後まで実行**してから Inno Setup でインストーラーを生成。
+    `vX.Y.Z` タグ時は GitHub Release に直リンクで添付
+- `setup_env.ps1` は `-Cpu` / `-Gpu` で PyTorch 種別を手動指定可能
+
 ## 0.6.0 (2026-06-13)
 
 ### 追加
