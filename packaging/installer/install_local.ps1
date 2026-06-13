@@ -133,18 +133,29 @@ Write-Step 'Verifying the installation'
 if ($LASTEXITCODE -ne 0) { throw 'Post-install verification failed' }
 
 # --- Shortcuts (Start Menu / desktop) ---
-function New-Shortcut($linkPath, $target) {
+# Copy the app icon into the install dir so the shortcut points at a stable
+# path that goes away with the rest of the install on removal.
+$icon = Join-Path $InstallDir 'poselab.ico'
+$iconSrc = Join-Path $RepoRoot 'packaging\installer\poselab.ico'
+if (Test-Path $iconSrc) {
+    Copy-Item $iconSrc $icon -Force -ErrorAction SilentlyContinue
+} else {
+    $icon = $null
+}
+
+function New-Shortcut($linkPath, $target, $iconPath) {
     $sh = New-Object -ComObject WScript.Shell
     $sc = $sh.CreateShortcut($linkPath)
     $sc.TargetPath = $target
     $sc.WorkingDirectory = (Split-Path $target)
     $sc.Description = 'PoseLab Studio'
+    if ($iconPath -and (Test-Path $iconPath)) { $sc.IconLocation = "$iconPath,0" }
     $sc.Save()
 }
 Write-Step 'Creating shortcuts'
 $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'PoseLab Studio.lnk'
 $desktop = Join-Path ([Environment]::GetFolderPath('Desktop')) 'PoseLab Studio.lnk'
-try { New-Shortcut $startMenu $launcher; New-Shortcut $desktop $launcher } catch {
+try { New-Shortcut $startMenu $launcher $icon; New-Shortcut $desktop $launcher $icon } catch {
     Write-Host "  (skipped shortcut creation: $_)" -ForegroundColor Yellow
 }
 

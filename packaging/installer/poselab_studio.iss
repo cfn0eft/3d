@@ -31,6 +31,9 @@ SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
+; セットアップ実行ファイルとアンインストール項目のアイコン
+SetupIconFile=poselab.ico
+UninstallDisplayIcon={app}\poselab.ico
 ; インストール時に約0.6〜2GB を取得するため十分な空きを要求
 ExtraDiskSpaceRequired=6442450944
 
@@ -44,12 +47,13 @@ Name: "desktopicon"; Description: "デスクトップにショートカットを
 Source: "uv.exe";              DestDir: "{app}"; Flags: ignoreversion
 Source: "setup_env.ps1";       DestDir: "{app}"; Flags: ignoreversion
 Source: "PoseLabStudio.cmd";   DestDir: "{app}"; Flags: ignoreversion
+Source: "poselab.ico";         DestDir: "{app}"; Flags: ignoreversion
 Source: "wheels\*";            DestDir: "{app}\wheels"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\PoseLab Studio"; Filename: "{app}\PoseLabStudio.cmd"; WorkingDir: "{app}"; Comment: "PoseLab Studio を起動"
+Name: "{group}\PoseLab Studio"; Filename: "{app}\PoseLabStudio.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\poselab.ico"; Comment: "PoseLab Studio を起動"
 Name: "{group}\PoseLab Studio をアンインストール"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\PoseLab Studio"; Filename: "{app}\PoseLabStudio.cmd"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\PoseLab Studio"; Filename: "{app}\PoseLabStudio.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\poselab.ico"; Tasks: desktopicon
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\env"
