@@ -47,8 +47,11 @@ jobs:
           mim install mmengine "mmcv==2.1.0" "mmdet==3.2.0" "mmpose==1.3.2"
 
       - name: Install poselab and PyInstaller
+        # editable (-e) ではなく通常インストール。editable だと
+        # PyInstaller が poselab を名前空間パッケージ扱いして __init__.py を
+        # 同梱せず、poselab.__version__ が欠落する (cli.py が import して失敗)
         run: |
-          pip install -e .
+          pip install .
           pip install "pyinstaller>=6.3" pyinstaller-hooks-contrib
 
       - name: Sanity check (imports)
