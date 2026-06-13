@@ -30,7 +30,17 @@ param(
 # Stop; we check $LASTEXITCODE explicitly instead.
 $ErrorActionPreference = 'Continue'
 
-function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
+$RULE = '  ' + ('-' * 52)
+function Write-Step($msg) {
+    Write-Host ''
+    Write-Host '  > ' -ForegroundColor Cyan -NoNewline
+    Write-Host $msg -ForegroundColor White
+}
+
+Write-Host ''
+Write-Host '  PoseLab Studio' -ForegroundColor Cyan
+Write-Host '  Setup' -ForegroundColor DarkGray
+Write-Host $RULE -ForegroundColor DarkGray
 
 New-Item -ItemType Directory -Force -Path $InstallDir -ErrorAction Stop | Out-Null
 $envDir = Join-Path $InstallDir 'env'
@@ -104,8 +114,10 @@ Write-Step 'Verifying the setup'
 Invoke-Py @('-c', 'import poselab; from poselab.studio import build_app_js; from poselab.studio.server import gpu_info; from mmpose.apis.inferencers import Pose3DInferencer; print("PoseLab Studio env OK:", poselab.__version__)')
 
 Write-Host ''
-Write-Host 'Setup complete.' -ForegroundColor Green
+Write-Host $RULE -ForegroundColor DarkGray
+Write-Host '  Setup complete' -ForegroundColor Green
 if (-not $useGpu) {
-    Write-Host '  (No GPU detected: running on CPU. Re-run on an NVIDIA GPU machine for CUDA.)' -ForegroundColor Yellow
+    Write-Host '    Note: no GPU detected - running on CPU. Re-run on an NVIDIA GPU for CUDA.' -ForegroundColor Yellow
 }
+Write-Host $RULE -ForegroundColor DarkGray
 exit 0
