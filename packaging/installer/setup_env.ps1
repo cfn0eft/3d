@@ -25,11 +25,14 @@ param(
     [switch]$Gpu    # force CUDA PyTorch
 )
 
-$ErrorActionPreference = 'Stop'
+# Note: not 'Stop' on purpose. Windows PowerShell 5.1 (used by the Inno
+# installer) turns native-command stderr writes into terminating errors under
+# Stop; we check $LASTEXITCODE explicitly instead.
+$ErrorActionPreference = 'Continue'
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+New-Item -ItemType Directory -Force -Path $InstallDir -ErrorAction Stop | Out-Null
 $envDir = Join-Path $InstallDir 'env'
 $python = Join-Path $envDir 'Scripts\python.exe'
 
@@ -39,7 +42,7 @@ $env:UV_CACHE_DIR = Join-Path $InstallDir 'uv-cache'
 
 # Force numpy<2 everywhere (torch 2.1.x is built against NumPy 1.x)
 $constraints = Join-Path $InstallDir 'constraints.txt'
-Set-Content -Path $constraints -Value 'numpy<2' -Encoding Ascii
+Set-Content -Path $constraints -Value 'numpy<2' -Encoding Ascii -ErrorAction Stop
 $env:PIP_CONSTRAINT = $constraints   # applies to pip / mim
 
 if (-not (Test-Path $UvExe)) { throw "uv.exe not found: $UvExe" }
@@ -57,15 +60,15 @@ if ($Gpu) {
 
 # --- 1. Private Python 3.11 + venv (with pip) ---
 Write-Step 'Provisioning private Python 3.11 and a virtual environment'
-& $UvExe venv --seed --python 3.11 $envDir
+& $UvExe venv --seed --python 3.11 $envDir 2>&1 | Out-Host
 if ($LASTEXITCODE -ne 0) { throw 'Failed to create the virtual environment' }
 
 function Invoke-UvPip([string[]]$PipArgs) {
-    & $UvExe pip install --python $python @PipArgs --constraint $constraints
+    & $UvExe pip install --python $python @PipArgs --constraint $constraints 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) { throw ("uv pip install failed: " + ($PipArgs -join ' ')) }
 }
 function Invoke-Py([string[]]$PyArgs) {
-    & $python @PyArgs
+    & $python @PyArgs 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) { throw ("python failed: " + ($PyArgs -join ' ')) }
 }
 
