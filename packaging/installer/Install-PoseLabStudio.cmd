@@ -1,9 +1,9 @@
 @echo off
-rem PoseLab Studio をローカルにインストールする (ダブルクリック用)。
-rem 署名済みの cmd.exe / powershell.exe / Python しか使わないため、
-rem Smart App Control にブロックされない。
+rem Install PoseLab Studio locally (double-click entry point).
+rem Uses only signed cmd.exe / powershell.exe / Python, so Windows
+rem Smart App Control does not block it. ASCII + CRLF on purpose.
 setlocal
-echo PoseLab Studio をインストールします...
+echo Installing PoseLab Studio...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install_local.ps1" %*
 echo.
 pause
