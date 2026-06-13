@@ -172,9 +172,13 @@
         <div class="card">
           <div class="card-head">
             <h2>モデルダウンロード</h2>
-            <span class="badge" id="downloads-meta">Ready</span>
+            <div class="progress-actions">
+              <span class="badge" id="downloads-meta">Ready</span>
+              <button id="download-models" class="btn ghost slim">ダウンロード</button>
+            </div>
           </div>
           <ul id="downloads-list" class="downloads-list"></ul>
+          <small class="dl-hint">推定モデル (人物検出 + 2D + 3D) を事前取得します。未取得でも Run 時に自動でダウンロードされます。</small>
         </div>
 
         <div class="card hint">

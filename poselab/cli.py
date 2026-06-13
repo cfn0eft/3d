@@ -125,6 +125,11 @@ def build_parser() -> argparse.ArgumentParser:
              "--json は MMPose 互換 results JSON になり poselab-viewer で再生可)",
     )
     g_model.add_argument(
+        "--prepare-models", action="store_true",
+        help="推定モデル一式 (検出 + 2D + 3D) の重みを事前ダウンロードして終了 "
+             "(--pose3d と併用、動画不要)",
+    )
+    g_model.add_argument(
         "--lift-model", default=None,
         help="3D リフティングモデル (既定: VideoPose3D 243frm 教師あり)",
     )
@@ -304,6 +309,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
         return 0
 
+    if args.prepare_models:
+        return _run_prepare_models(parser, args)
+
     if not args.input:
         parser.error("--input を指定してください (--list-keypoints 以外では必須)")
 
@@ -350,6 +358,34 @@ def _run_auto_output(parser: argparse.ArgumentParser, args) -> int:
             return code
         if not args.quiet:
             print(f"  出力フォルダ: {out_dir}", file=sys.stderr)
+    return 0
+
+
+def _run_prepare_models(parser: argparse.ArgumentParser, args) -> int:
+    """--prepare-models: 推定モデルの重みを事前ダウンロードする。"""
+    from poselab.backends.mmpose_backend import DEFAULT_POSE2D
+    from poselab.pose3d import DEFAULT_LIFT, prepare_models
+
+    lift = args.lift_model or DEFAULT_LIFT
+    pose2d = args.pose2d_model or DEFAULT_POSE2D
+    try:
+        print(
+            "モデルを準備しています (未取得の重みはここでダウンロードされます)...",
+            file=sys.stderr,
+        )
+        prepare_models(
+            lift_model=lift,
+            lift_weights=args.lift_weights,
+            pose2d=pose2d,
+            pose2d_weights=args.pose2d_weights,
+            det_model=args.det_model,
+            det_weights=args.det_weights,
+            device=args.device,
+        )
+    except ImportError as exc:
+        print(f"エラー: {exc}", file=sys.stderr)
+        return 1
+    print("モデルの準備が完了しました", file=sys.stderr)
     return 0
 
 

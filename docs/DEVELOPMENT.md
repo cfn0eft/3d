@@ -164,6 +164,6 @@ poselab --info    # mmpose の検出状況を確認
       (v0.6.0 `build-exe.yml`)
 - [x] 軽量なオンラインインストーラー (v0.6.1 `build-installer.yml` +
       `packaging/installer/`)。GPU 自動判定・タグ時 Release 添付
-- [ ] モデル重みの事前ダウンロードと GUI「Downloads」パネルへの進捗表示
-      (現状は mmpose 任せで進捗が出ない)
+- [x] モデル重みの事前ダウンロードと GUI「Downloads」パネル
+      (v0.8.0 `poselab --pose3d --prepare-models` + `/download-models`)
 - [ ] mmpose バックエンドの GPU 実機スモークの定期実行

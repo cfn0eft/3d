@@ -45,6 +45,37 @@ def _load_pose3d_inferencer():
     return Pose3DInferencer
 
 
+def prepare_models(
+    *,
+    lift_model: str = DEFAULT_LIFT,
+    lift_weights: Optional[str] = None,
+    pose2d: str = DEFAULT_POSE2D,
+    pose2d_weights: Optional[str] = None,
+    det_model: Optional[str] = None,
+    det_weights: Optional[str] = None,
+    device: Optional[str] = None,
+    inferencer=None,
+):
+    """推定モデル一式 (人物検出 + 2D + 3D リフタ) の重みを事前取得する。
+
+    Pose3DInferencer を構築するだけで、検出器・2D・3D の各チェックポイントが
+    MMPose の model zoo から (未取得なら) ダウンロードされる。動画は不要。
+    GUI の「モデルダウンロード」から事前に呼ぶための入口。
+    """
+    if inferencer is None:
+        pose3d_cls = _load_pose3d_inferencer()
+        inferencer = pose3d_cls(
+            model=lift_model,
+            weights=lift_weights,
+            pose2d_model=pose2d,
+            pose2d_weights=pose2d_weights,
+            det_model=det_model,
+            det_weights=det_weights,
+            device=device,
+        )
+    return inferencer
+
+
 def _jsonable(value):
     """dataset_meta などを JSON 化できる形に再帰変換する。"""
     if isinstance(value, dict):

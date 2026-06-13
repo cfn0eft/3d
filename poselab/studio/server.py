@@ -156,6 +156,36 @@ def build_command(job: dict) -> List[str]:
     return cmd
 
 
+def prepare_models_command(job: dict) -> List[str]:
+    """推定モデル一式 (検出 + 2D + 3D) を事前ダウンロードするコマンド。"""
+    cmd = [*worker_command_prefix(), "--pose3d", "--prepare-models"]
+    for key, flag in (
+        ("pose2d_model", "--pose2d-model"),
+        ("lift_model", "--lift-model"),
+        ("det_model", "--det-model"),
+        ("device", "--device"),
+    ):
+        if job.get(key):
+            cmd.extend([flag, str(job[key])])
+    return cmd
+
+
+def model_download_entries(job: dict, status: str) -> List[dict]:
+    """「モデルダウンロード」パネル用の 3 モデル (検出 / 2D / 3D) 一覧。"""
+    det = job.get("det_model") or "RTMDet (既定)"
+    pose2d = job.get("pose2d_model") or "RTMPose (既定)"
+    lift = job.get("lift_model") or "VideoPose3D (既定)"
+    return [
+        {"name": f"人物検出: {det}", "status": status},
+        {"name": f"2D 推定: {pose2d}", "status": status},
+        {"name": f"3D リフティング: {lift}", "status": status},
+    ]
+
+
+# 既定モデルを一度取得したことを示すマーカー (再起動後も ready 表示にする)
+MODEL_READY_MARKER = Path.home() / ".cache" / "poselab" / ".studio_models_ready"
+
+
 # ProgressReporter の出力 ("[####----]  60.0%  18/30 ...") から % を拾う
 _PROGRESS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 
@@ -355,8 +385,10 @@ class JobManager:
     def __init__(
         self,
         command_builder: Callable[[dict], List[str]] = build_command,
+        download_command_builder: Callable[[dict], List[str]] = prepare_models_command,
     ) -> None:
         self._command_builder = command_builder
+        self._download_command_builder = download_command_builder
         self._lock = threading.Lock()
         self._queue: List[dict] = []
         self._completed: List[dict] = []
@@ -370,6 +402,13 @@ class JobManager:
         self._cancel = threading.Event()
         self._worker: Optional[threading.Thread] = None
         self._subscribers: List["queue.Queue[str]"] = []
+        # モデルダウンロード状態 (前回取得済みなら ready で開始)
+        ready = MODEL_READY_MARKER.exists()
+        self._downloads: List[dict] = model_download_entries(
+            {}, "ready" if ready else "pending"
+        )
+        self._downloading = False
+        self._download_thread: Optional[threading.Thread] = None
 
     # ---- イベント配信 (SSE) ----
 
@@ -419,7 +458,7 @@ class JobManager:
                     {"input": job.get("input")} for job in self._queue
                 ],
                 "completed": list(self._completed),
-                "downloads": [],
+                "downloads": list(self._downloads),
                 "return_code": self._last_return_code,
             }
 
@@ -471,6 +510,73 @@ class JobManager:
             process.terminate()
         self.emit_log("Cancel requested.")
         return {"ok": True}
+
+    # ---- モデルダウンロード ----
+
+    def download_models(self, payload: Optional[dict] = None) -> dict:
+        """推定モデル一式 (検出 + 2D + 3D) を事前ダウンロードする。"""
+        with self._lock:
+            if self._downloading:
+                return {"ok": False, "error": "Already downloading models."}
+            if self._running:
+                return {"ok": False, "error": "A job is running."}
+            self._downloading = True
+        self._download_thread = threading.Thread(
+            target=self._download_worker, args=(payload or {},),
+            name="studio-download", daemon=True,
+        )
+        self._download_thread.start()
+        return {"ok": True}
+
+    def wait_download(self, timeout: Optional[float] = None) -> None:
+        """テスト用: ダウンロードスレッドの終了を待つ。"""
+        thread = self._download_thread
+        if thread is not None:
+            thread.join(timeout)
+
+    def _download_worker(self, payload: dict) -> None:
+        job = normalize_job({**payload, "input": "_prepare_"})
+        command = self._download_command_builder(job)
+        try:
+            with self._lock:
+                self._downloads = model_download_entries(job, "downloading")
+            self._emit_status()
+            self.emit_log("Preparing models: " + " ".join(command))
+            code = self._run_streamed(command)
+            if code == 0:
+                try:
+                    MODEL_READY_MARKER.parent.mkdir(parents=True, exist_ok=True)
+                    MODEL_READY_MARKER.write_text("ok", encoding="utf-8")
+                except OSError:
+                    pass
+            else:
+                self.emit_log(f"Model download failed (code {code}).")
+            with self._lock:
+                self._downloads = model_download_entries(
+                    job, "ready" if code == 0 else "failed"
+                )
+        finally:
+            with self._lock:
+                self._downloading = False
+            self._emit_status()
+
+    def _run_streamed(self, command: List[str]) -> int:
+        """サブプロセスを実行し、出力を行単位で配信して終了コードを返す。"""
+        env = dict(os.environ)
+        env.setdefault("PYTHONUNBUFFERED", "1")
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+        env.setdefault("PYTHONWARNINGS", "ignore")
+        try:
+            process = subprocess.Popen(
+                command, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, env=env,
+            )
+        except OSError as exc:
+            self.emit_log(f"Error: failed to start: {exc}")
+            return 1
+        self._stream_process_output(process)
+        process.wait()
+        return int(process.returncode or 0)
 
     # ---- 実行 ----
 
@@ -549,6 +655,7 @@ class JobManager:
         env = dict(os.environ)
         env.setdefault("PYTHONUNBUFFERED", "1")
         env.setdefault("PYTHONIOENCODING", "utf-8")
+        env.setdefault("PYTHONWARNINGS", "ignore")  # mmengine の pkg_resources 警告など抑制
         try:
             process = subprocess.Popen(
                 command,
@@ -868,6 +975,8 @@ class StudioHandler(BaseHTTPRequestHandler):
             return self._send_json(self.manager.clear())
         if path == "/cancel":
             return self._send_json(self.manager.cancel())
+        if path == "/download-models":
+            return self._send_json(self.manager.download_models(self._read_json()))
         if path == "/preflight":
             return self._send_json(preflight(self._read_json()))
         if path == "/pick-video":

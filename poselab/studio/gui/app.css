@@ -606,6 +606,13 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text-faint);
   margin-top: 5px;
 }
+.dl-hint {
+  display: block;
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-faint);
+}
 .download-bar {
   position: relative;
   height: 4px;
