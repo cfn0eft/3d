@@ -1,19 +1,13 @@
-# PoseLab Studio local installer (uses only signed cmd / powershell / Python).
-#
-# No unsigned .exe is executed, so Windows Smart App Control does not block it.
-# Run it from the repository root: it builds a private venv and installs the
-# GPU (or CPU) PyTorch + mmpose stack + poselab, then creates Start Menu and
-# desktop shortcuts.
+# PoseLab Studio local installer (uses only signed cmd / powershell / Python /
+# uv). No unsigned .exe of ours is executed, so Smart App Control does not
+# block it. Installs are run with uv for clean, uv-style progress.
 #
 # Usage (either one):
 #   - double-click packaging\installer\Install-PoseLabStudio.cmd
 #   - powershell -ExecutionPolicy Bypass -File packaging\installer\install_local.ps1
 #
-# ASCII only on purpose: Windows PowerShell 5.1 misreads UTF-8 (no BOM) files on
-# non-English locales, which corrupts the script. Keep this file ASCII + CRLF.
-#
-# Requires Python 3.11 (mmcv has no Windows wheel for 3.12). Installs it via
-# winget if missing.
+# ASCII only on purpose (Windows PowerShell 5.1 misreads non-ASCII files on
+# non-English locales). Keep this file ASCII + CRLF.
 
 [CmdletBinding()]
 param(
@@ -22,10 +16,9 @@ param(
     [switch]$Gpu    # force CUDA PyTorch
 )
 
-# Note: do NOT use $ErrorActionPreference='Stop'. On Windows PowerShell 5.1
-# that turns any native-command stderr write (e.g. "py: No suitable Python
-# runtime", or pip warnings) into a terminating error. We check $LASTEXITCODE
-# explicitly instead, and use -ErrorAction Stop on the few critical cmdlets.
+# Not 'Stop': on Windows PowerShell 5.1, Stop turns any native-command stderr
+# write (uv/pip progress, "py: no runtime", ...) into a terminating error. We
+# check $LASTEXITCODE explicitly and use -ErrorAction Stop on key cmdlets.
 $ErrorActionPreference = 'Continue'
 
 $RULE = '  ' + ('-' * 52)
@@ -40,66 +33,52 @@ function Write-Step($m) {
     Write-Host '  > ' -ForegroundColor Cyan -NoNewline
     Write-Host $m -ForegroundColor White
 }
-function Write-Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
 
 # Repo root (this script lives in packaging/installer/)
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
 Write-Banner
 
-# --- Find Python 3.11 (install via winget if missing) ---
-function Resolve-Py311 {
-    if (Get-Command py -ErrorAction SilentlyContinue) {
-        $p = (& py -3.11 -c "import sys;print(sys.executable)" 2>$null)
-        if ($LASTEXITCODE -eq 0 -and $p) { return $p.Trim() }
-    }
-    if (Get-Command python -ErrorAction SilentlyContinue) {
-        $p = (& python -c "import sys;print(sys.executable) if sys.version_info[:2]==(3,11) else None" 2>$null)
-        if ($p -and $p.Trim() -and $p.Trim() -ne 'None') { return $p.Trim() }
-    }
-    return $null
-}
-
-Write-Step 'Checking for Python 3.11'
-$py311 = Resolve-Py311
-if (-not $py311) {
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Step 'Python 3.11 not found - installing it via winget (this can take a minute)'
-        winget install -e --id Python.Python.3.11 --silent `
-            --accept-package-agreements --accept-source-agreements 2>&1 | Out-Host
-        $py311 = Resolve-Py311
-    }
-}
-if (-not $py311) {
-    throw 'Python 3.11 not found. Install it (winget install -e --id Python.Python.3.11) and re-run.'
-}
-Write-Host "  Using Python: $py311"
-
-# --- Create the venv ---
 New-Item -ItemType Directory -Force -Path $InstallDir -ErrorAction Stop | Out-Null
 $venv = Join-Path $InstallDir 'env'
 $python = Join-Path $venv 'Scripts\python.exe'
+
+# --- Fetch uv (the package manager that drives the install + progress UI) ---
+# uv is a single signed-by-Astral binary; downloading and running it is fine
+# under Smart App Control. Keep everything under $InstallDir for clean removal.
+$uv = Join-Path $InstallDir 'uv.exe'
+if (-not (Test-Path $uv)) {
+    Write-Step 'Fetching uv (package manager)'
+    $zip = Join-Path $InstallDir 'uv.zip'
+    $url = 'https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip'
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -ErrorAction Stop
+        Expand-Archive -Path $zip -DestinationPath $InstallDir -Force -ErrorAction Stop
+        Remove-Item $zip -ErrorAction SilentlyContinue
+    } catch {
+        throw "Failed to download uv: $_"
+    }
+}
+if (-not (Test-Path $uv)) { throw "uv.exe not found after download: $uv" }
+
+# uv targets the environment via VIRTUAL_ENV (an env var, so a path with spaces
+# like "...\PoseLab Studio\env" is passed safely - never as a CLI argument).
+$env:VIRTUAL_ENV = $venv
+$env:UV_CACHE_DIR = Join-Path $InstallDir 'uv-cache'
+$env:UV_PYTHON_INSTALL_DIR = Join-Path $InstallDir 'python'
+
+function Invoke-Uv([string[]]$UvArgs) {
+    & $uv @UvArgs
+    if ($LASTEXITCODE -ne 0) { throw ("uv failed: " + ($UvArgs -join ' ')) }
+}
+
+# --- Private Python 3.11 + venv (uv provisions Python; no system install) ---
+# mmcv ships Windows wheels only up to 3.11, so pin 3.11.
 if (-not (Test-Path $python)) {
-    Write-Step 'Creating the private virtual environment'
-    & $py311 -m venv $venv
-    if ($LASTEXITCODE -ne 0) { throw 'Failed to create the virtual environment' }
+    Write-Step 'Creating the private environment (Python 3.11)'
+    Invoke-Uv @('venv', '--seed', '--python', '3.11', $venv)
 }
-
-# Force numpy<2 for every install (torch 2.1.x is built against NumPy 1.x)
-$constraints = Join-Path $InstallDir 'constraints.txt'
-Set-Content -Path $constraints -Value 'numpy<2' -Encoding Ascii -ErrorAction Stop
-
-# Pass the constraint as an argument, NOT via $env:PIP_CONSTRAINT: pip splits
-# that env var on whitespace, so an install path with a space (e.g.
-# "...\PoseLab Studio\constraints.txt") would be read as two broken paths.
-function Invoke-Pip([string[]]$PipArgs) {
-    & $python -m pip install --no-input @PipArgs --constraint $constraints 2>&1 | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw ("pip install failed: " + ($PipArgs -join ' ')) }
-}
-
-# Upgrade pip / setuptools / wheel. wheel is required for chumpy's
-# --no-build-isolation build (bdist_wheel); python -m venv does not seed it.
-Invoke-Pip @('-U', 'pip', 'setuptools', 'wheel')
 
 # --- GPU detection ---
 $useGpu = $false
@@ -109,30 +88,32 @@ elseif (-not $Cpu) {
     if ($smi) { try { & $smi.Source | Out-Null; if ($LASTEXITCODE -eq 0) { $useGpu = $true } } catch {} }
 }
 
-# --- PyTorch ---
+# --- PyTorch (numpy pinned inline so no --constraint file / no spaced args) ---
 if ($useGpu) {
-    Write-Step 'NVIDIA GPU detected - installing CUDA 11.8 PyTorch (about 2GB)'
+    Write-Step 'Installing CUDA 11.8 PyTorch (NVIDIA GPU detected, ~2GB)'
     $torchIndex = 'https://download.pytorch.org/whl/cu118'
+    $mmFind = 'https://download.openmmlab.com/mmcv/dist/cu118/torch2.1/index.html'
 } else {
-    Write-Step 'No GPU detected - installing CPU PyTorch (lightweight)'
+    Write-Step 'Installing CPU PyTorch (no GPU detected, lightweight)'
     $torchIndex = 'https://download.pytorch.org/whl/cpu'
+    $mmFind = 'https://download.openmmlab.com/mmcv/dist/cpu/torch2.1/index.html'
 }
-Invoke-Pip @('torch==2.1.2', 'torchvision==0.16.2', '--index-url', $torchIndex)
+Invoke-Uv @('pip', 'install', 'torch==2.1.2', 'torchvision==0.16.2', 'numpy<2', '--index-url', $torchIndex)
 
-# --- chumpy (mmpose dependency, broken sdist needs no build isolation) ---
+# --- chumpy (mmpose dependency; broken sdist needs no build isolation) ---
 Write-Step 'Installing mmpose dependency (chumpy)'
-Invoke-Pip @('numpy<2', 'scipy')
-Invoke-Pip @('chumpy==0.70', '--no-build-isolation')
+Invoke-Uv @('pip', 'install', 'scipy', 'numpy<2')
+Invoke-Uv @('pip', 'install', 'chumpy==0.70', '--no-build-isolation')
 
-# --- OpenMMLab (mim picks the mmcv matching torch CUDA/CPU) ---
+# --- OpenMMLab (mmcv wheel matched to torch via --find-links) ---
 Write-Step 'Installing OpenMMLab (mmengine / mmcv / mmdet / mmpose)'
-Invoke-Pip @('-U', 'openmim')
-& $python -m mim install mmengine 'mmcv==2.1.0' 'mmdet==3.2.0' 'mmpose==1.3.2' 2>&1 | Out-Host
-if ($LASTEXITCODE -ne 0) { throw 'mim install failed' }
+Invoke-Uv @('pip', 'install', 'mmengine', 'mmcv==2.1.0', 'mmdet==3.2.0', 'mmpose==1.3.2',
+    'numpy<2', '--find-links', $mmFind)
 
-# --- poselab itself (from the repo) ---
+# --- poselab itself (install "." from the repo to avoid a spaced path arg) ---
 Write-Step 'Installing poselab'
-Invoke-Pip @($RepoRoot)
+Push-Location $RepoRoot
+try { Invoke-Uv @('pip', 'install', '.', 'numpy<2') } finally { Pop-Location }
 
 # --- Launcher + sanity check ---
 $launcher = Join-Path $InstallDir 'PoseLab Studio.cmd'

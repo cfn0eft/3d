@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.2 (2026-06-13)
+
+### 変更
+- ローカルインストーラー (`install_local.ps1`) を **uv 駆動**に刷新。
+  インストール状況が uv のきれいな進捗表示 (スピナー / 進捗バー /
+  "Downloaded ..." / "Installed N packages in Xms") で可視化される
+  - uv が専用 Python 3.11 と venv も用意するため **winget 不要**に
+  - uv のターゲットは `VIRTUAL_ENV` 環境変数で渡し、numpy 制約はインライン
+    指定にして、**スペースを含むパスでも安全** (引数にスペース入りパスを
+    渡さない)。mmcv は `--find-links` で torch に合う wheel を取得
+  - uv 本体は Astral 署名済みバイナリを取得して使用 (SAC でブロックされない)
+
 ## 0.7.1 (2026-06-13)
 
 ### 修正
