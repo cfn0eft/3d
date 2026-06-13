@@ -97,7 +97,7 @@ Invoke-UvPip @($wheel.FullName)
 
 # --- 6. 動作確認 ---
 Write-Step 'セットアップの動作確認'
-Invoke-Py @('-c', 'import poselab; from poselab.studio.server import build_app_js; from mmpose.apis.inferencers import Pose3DInferencer; print("PoseLab Studio env OK:", poselab.__version__)')
+Invoke-Py @('-c', 'import poselab; from poselab.studio import build_app_js; from poselab.studio.server import gpu_info; from mmpose.apis.inferencers import Pose3DInferencer; print("PoseLab Studio env OK:", poselab.__version__)')
 
 Write-Host ''
 Write-Host 'セットアップが完了しました。' -ForegroundColor Green
