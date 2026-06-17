@@ -57,14 +57,23 @@ _TRAIL_CHOICES = {
     "全キーポイント": ["all"],
 }
 
-# ダークテーマ配色
-_BG = "#1e1e1e"
-_BG_PANEL = "#252526"
-_BG_FIELD = "#2d2d30"
-_FG = "#e8e8e8"
-_FG_DIM = "#9d9d9d"
-_ACCENT = "#4a9eda"
-_REC_RED = "#e05050"
+# PoseLab Studio (Web GUI) の配色トークンに合わせたダークテーマ
+_BG = "#0a0a0b"            # 背景
+_BG_SOFT = "#101013"       # やや明るい背景 (キャンバス等)
+_BG_PANEL = "#141417"      # パネル (ツールバー / ステータス / タブ地)
+_PANEL_STRONG = "#1c1c21"  # フィールド / ボタン地
+_BG_FIELD = "#1c1c21"      # 入力欄
+_LINE = "#2a2a31"          # 罫線
+_FG = "#ededef"            # 文字
+_FG_DIM = "#a1a1ab"        # 淡い文字
+_FG_FAINT = "#6b6b76"      # さらに淡い文字
+_ACCENT = "#8b93ff"        # アクセント (紫)
+_ACCENT_STRONG = "#6e78f0"  # アクセント (濃)
+_ACCENT_INK = "#0a0b16"    # アクセント上の文字
+_OK = "#57d399"            # 成功
+_WARN = "#f0848c"          # 警告
+_AMBER = "#f3c45a"         # 注意
+_REC_RED = "#f0848c"       # 記録インジケータ
 
 
 class PoseLabApp:
@@ -109,55 +118,105 @@ class PoseLabApp:
         return value if isinstance(value, type(default)) else default
 
     # ------------------------------------------------------------------ テーマ
+    def _pick_font(self, prefs: list) -> str:
+        """インストール済みフォントから優先順に最初の 1 つを選ぶ。"""
+        import tkinter.font as tkfont
+
+        available = set(tkfont.families(self.root))
+        for family in prefs:
+            if family in available:
+                return family
+        return prefs[-1]
+
     def _apply_theme(self) -> None:
-        ttk = self.ttk
+        tk, ttk = self.tk, self.ttk
+        import tkinter.font as tkfont
+
         self.root.configure(bg=_BG)
+
+        # フォント: Studio の Inter + Noto Sans JP に相当するものを優先
+        ui_family = self._pick_font([
+            "Noto Sans JP", "Yu Gothic UI", "Meiryo UI", "Segoe UI",
+            "Hiragino Sans", "Helvetica",
+        ])
+        mono_family = self._pick_font([
+            "Cascadia Mono", "Consolas", "SF Mono", "Menlo",
+            "DejaVu Sans Mono", "Courier",
+        ])
+        self._mono_family = mono_family
+        for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont"):
+            try:
+                tkfont.nametofont(name).configure(family=ui_family, size=10)
+            except tk.TclError:
+                pass
+        try:
+            tkfont.nametofont("TkFixedFont").configure(family=mono_family, size=10)
+        except tk.TclError:
+            pass
+
         style = ttk.Style(self.root)
         style.theme_use("clam")
 
         style.configure(".", background=_BG, foreground=_FG,
-                        fieldbackground=_BG_FIELD, bordercolor="#3a3a3a",
-                        lightcolor=_BG_PANEL, darkcolor=_BG,
+                        fieldbackground=_BG_FIELD, bordercolor=_LINE,
+                        lightcolor=_PANEL_STRONG, darkcolor=_BG,
                         troughcolor=_BG_FIELD, focuscolor=_ACCENT)
         style.configure("TFrame", background=_BG)
         style.configure("Panel.TFrame", background=_BG_PANEL)
         style.configure("TLabel", background=_BG, foreground=_FG)
         style.configure("Dim.TLabel", background=_BG, foreground=_FG_DIM)
-        style.configure("Status.TLabel", background=_BG_PANEL, foreground=_FG,
+        style.configure("Faint.TLabel", background=_BG, foreground=_FG_FAINT)
+        style.configure("Heading.TLabel", background=_BG, foreground=_FG,
+                        font=(ui_family, 12, "bold"))
+        style.configure("Badge.TLabel", background=_PANEL_STRONG,
+                        foreground=_ACCENT, padding=(8, 2))
+        style.configure("Status.TLabel", background=_BG_PANEL, foreground=_FG_DIM,
                         padding=(8, 4))
         style.configure("Rec.TLabel", background=_BG_PANEL, foreground=_REC_RED,
                         padding=(8, 4))
-        style.configure("TLabelframe", background=_BG, bordercolor="#3a3a3a")
+        # ラベルフレームは同じ背景＋細い罫線でカード風の輪郭にする
+        style.configure("TLabelframe", background=_BG, bordercolor=_LINE,
+                        relief="solid", borderwidth=1)
         style.configure("TLabelframe.Label", background=_BG, foreground=_FG_DIM)
-        style.configure("TButton", background=_BG_FIELD, foreground=_FG,
-                        padding=(10, 5), borderwidth=1)
+        style.configure("TButton", background=_PANEL_STRONG, foreground=_FG,
+                        padding=(10, 6), borderwidth=1, relief="flat")
         style.map("TButton",
-                  background=[("active", "#3e3e42"), ("pressed", _ACCENT)])
-        style.configure("Tool.TButton", padding=(12, 6))
+                  background=[("active", "#26262d"), ("pressed", "#26262d")],
+                  bordercolor=[("focus", _ACCENT)])
+        style.configure("Tool.TButton", padding=(12, 7))
         style.configure("Accent.TButton", background=_ACCENT,
-                        foreground="#ffffff")
-        style.map("Accent.TButton", background=[("active", "#5fb0e8")])
+                        foreground=_ACCENT_INK, borderwidth=0)
+        style.map("Accent.TButton",
+                  background=[("active", _ACCENT_STRONG), ("pressed", _ACCENT_STRONG)],
+                  foreground=[("active", _ACCENT_INK)])
         style.configure("TCheckbutton", background=_BG, foreground=_FG)
-        style.map("TCheckbutton", background=[("active", _BG)])
+        style.map("TCheckbutton",
+                  background=[("active", _BG)],
+                  indicatorcolor=[("selected", _ACCENT)])
         style.configure("TSpinbox", arrowcolor=_FG, background=_BG_FIELD,
-                        foreground=_FG, insertcolor=_FG)
+                        foreground=_FG, insertcolor=_FG, bordercolor=_LINE)
         style.configure("TCombobox", arrowcolor=_FG, background=_BG_FIELD,
-                        foreground=_FG)
+                        foreground=_FG, bordercolor=_LINE)
         style.map("TCombobox", fieldbackground=[("readonly", _BG_FIELD)],
                   foreground=[("readonly", _FG)])
+        style.configure("TEntry", fieldbackground=_BG_FIELD, foreground=_FG,
+                        insertcolor=_FG, bordercolor=_LINE)
         style.configure("TNotebook", background=_BG, borderwidth=0)
         style.configure("TNotebook.Tab", background=_BG_PANEL, foreground=_FG_DIM,
-                        padding=(12, 6))
+                        padding=(14, 7), borderwidth=0)
         style.map("TNotebook.Tab",
                   background=[("selected", _BG)],
-                  foreground=[("selected", _FG)])
+                  foreground=[("selected", _ACCENT), ("active", _FG)])
         style.configure("Horizontal.TProgressbar", background=_ACCENT,
                         troughcolor=_BG_FIELD, borderwidth=0)
-        style.configure("TSeparator", background="#3a3a3a")
+        style.configure("TSeparator", background=_LINE)
+        style.configure("TScrollbar", background=_PANEL_STRONG,
+                        troughcolor=_BG, bordercolor=_BG, arrowcolor=_FG_DIM)
         # Combobox のドロップダウンリスト (tk オプション)
         self.root.option_add("*TCombobox*Listbox.background", _BG_FIELD)
         self.root.option_add("*TCombobox*Listbox.foreground", _FG)
         self.root.option_add("*TCombobox*Listbox.selectBackground", _ACCENT)
+        self.root.option_add("*TCombobox*Listbox.selectForeground", _ACCENT_INK)
 
     # ---------------------------------------------------------------- UI 構築
     def _build_ui(self) -> None:
@@ -191,7 +250,7 @@ class PoseLabApp:
         # 左: プレビューキャンバス + 再生位置
         left = ttk.Frame(main)
         left.pack(side="left", fill="both", expand=True)
-        self.canvas = tk.Canvas(left, bg="#141414", highlightthickness=0)
+        self.canvas = tk.Canvas(left, bg=_BG_SOFT, highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         play_row = ttk.Frame(left)
         play_row.pack(fill="x", pady=(6, 0))
@@ -368,9 +427,10 @@ class PoseLabApp:
 
     def _build_tab_angle(self, tab) -> None:
         ttk = self.ttk
-        ttk.Label(tab, text="検出中の関節角度 (度)").pack(anchor="w", pady=(0, 6))
+        ttk.Label(tab, text="検出中の関節角度 (度)", style="Heading.TLabel").pack(
+            anchor="w", pady=(0, 6))
         self.angle_label = ttk.Label(
-            tab, text="(未検出)", font=("Courier", 10), justify="left"
+            tab, text="(未検出)", font=(self._mono_family, 10), justify="left"
         )
         self.angle_label.pack(anchor="w")
         ttk.Label(
