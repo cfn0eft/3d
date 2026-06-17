@@ -185,6 +185,15 @@ function buildPayload(options = {}) {
     progress: progressToggle.checked,
     center_root: centerRoot.checked,
     normalize_scale: normalizeScale.checked,
+    // 分析出力 / 平滑化 / マスキング
+    angles: $("out-angles").checked,
+    velocity: $("out-velocity").checked,
+    symmetry: $("out-symmetry").checked,
+    smooth_method: $("smooth-method").value,
+    smooth_window: parseInt($("smooth-window").value, 10) || 0,
+    smooth_cutoff: parseFloat($("smooth-cutoff").value) || 0,
+    smooth_weighted: $("smooth-weighted").checked,
+    mask_visibility: parseFloat($("mask-visibility").value) || 0,
     ...options,
   };
   if (backend === "mediapipe") {

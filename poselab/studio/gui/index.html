@@ -183,6 +183,51 @@
             </select>
           </label>
 
+          <div class="field">
+            <span>分析出力</span>
+            <div class="switch-grid">
+              <label class="switch-row">
+                <span>関節角度 CSV</span>
+                <input id="out-angles" type="checkbox" /><i></i>
+              </label>
+              <label class="switch-row">
+                <span>速度・加速度 CSV</span>
+                <input id="out-velocity" type="checkbox" /><i></i>
+              </label>
+              <label class="switch-row">
+                <span>左右対称性 CSV</span>
+                <input id="out-symmetry" type="checkbox" /><i></i>
+              </label>
+            </div>
+            <small>角度・速度・対称性は MediaPipe バックエンドで出力されます。</small>
+          </div>
+
+          <label class="field">
+            <span>平滑化</span>
+            <select id="smooth-method">
+              <option value="moving" selected>移動平均</option>
+              <option value="median">メディアン (外れ値に強い)</option>
+              <option value="butter">Butterworth (ゼロ位相)</option>
+            </select>
+            <div class="field-row">
+              <input id="smooth-window" type="number" min="0" value="0"
+                     placeholder="窓フレーム数" title="移動平均/メディアンの窓 (0=無効)" />
+              <input id="smooth-cutoff" type="number" min="0" step="0.5"
+                     placeholder="cutoff Hz" title="Butterworth のカットオフ周波数" />
+            </div>
+            <label class="switch-row">
+              <span>visibility 加重 (移動平均)</span>
+              <input id="smooth-weighted" type="checkbox" /><i></i>
+            </label>
+            <small>移動平均/メディアンは窓フレーム数、Butterworth はカットオフ Hz を使用 (MediaPipe のみ)。</small>
+          </label>
+
+          <label class="field">
+            <span>低信頼度マスキング (visibility 閾値)</span>
+            <input id="mask-visibility" type="number" min="0" max="1" step="0.05" value="0" />
+            <small>閾値未満の座標を欠損として出力 (0=無効)。両バックエンド対応。</small>
+          </label>
+
           <button id="run-btn" class="btn run">
             <span>実行</span>
             <em id="run-hint">GPU 必須</em>
