@@ -1114,7 +1114,37 @@ $("viewer-export-btn").addEventListener("click", () => {
     `ビューアエクスポート: ${spec.label} (${col.records.length} フレーム × ${col.names.length} 関節)`);
 });
 
+/* ----- 上部タブ (実行 / ビューア / 結果・分析) の切り替え ----- */
+
+function activateTab(name) {
+  document.querySelectorAll(".tabs .tab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.tab === name);
+  });
+  document.querySelectorAll(".tab-panel").forEach((p) => {
+    p.hidden = p.dataset.panel !== name;
+  });
+  if (name === "viewer") {
+    // 非表示中に初期化された canvas を再描画 (ResizeObserver がサイズ調整)
+    stage3d.dirty = true;
+  }
+}
+
+function setupTabs() {
+  document.querySelectorAll(".tabs .tab").forEach((tab) => {
+    tab.addEventListener("click", () => activateTab(tab.dataset.tab));
+  });
+  activateTab("run");
+}
+
+// 出力が届いたら結果タブへ誘導するため、ビューア読込時は自動でビューアタブへ
+const _origLoadViewerModel = loadViewerModel;
+loadViewerModel = function (model, sourceLabel) {
+  _origLoadViewerModel(model, sourceLabel);
+  activateTab("viewer");
+};
+
 document.addEventListener("DOMContentLoaded", () => {
+  setupTabs();
   checkGPU();
   startEvents();
   applyAutoOutput();
