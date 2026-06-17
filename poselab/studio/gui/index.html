@@ -51,8 +51,15 @@
       </div>
     </header>
 
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="run" role="tab">実行</button>
+      <button class="tab" data-tab="viewer" role="tab">ビューア</button>
+      <button class="tab" data-tab="results" role="tab">結果・分析</button>
+    </nav>
+
     <main class="shell">
-      <!-- ============ 左カラム: ジョブ設定 ============ -->
+      <!-- ============ ① 実行: 設定・チェック・進捗 ============ -->
+      <div class="tab-panel" data-panel="run">
       <section class="col">
         <div class="card">
           <div class="card-head">
@@ -233,7 +240,9 @@
             <em id="run-hint">GPU 必須</em>
           </button>
         </div>
+      </section>
 
+      <section class="col">
         <div class="card">
           <div class="card-head">
             <h2>システムチェック</h2>
@@ -257,12 +266,9 @@
 
         <div class="card hint">
           <strong>ヒント:</strong> 安定動作のため絶対パスを推奨します。
-          結果 JSON / CSV は下の 3D ビューアへドラッグ & ドロップでも読み込めます。
+          結果 JSON / CSV は「ビューア」タブへドラッグ & ドロップでも読み込めます。
         </div>
-      </section>
 
-      <!-- ============ 右カラム: 進捗・ビューア・結果 ============ -->
-      <section class="col">
         <div class="card progress-card">
           <div class="card-head">
             <h2>進捗</h2>
@@ -273,7 +279,12 @@
           </div>
           <div class="progress-bar"><div id="progress-fill"></div></div>
         </div>
+      </section>
+      </div>
 
+      <!-- ============ ② ビューア ============ -->
+      <div class="tab-panel single" data-panel="viewer" hidden>
+      <section class="col">
         <div class="card viewer-card">
           <div class="card-head">
             <h2>3D ビューア</h2>
@@ -394,7 +405,12 @@
           <video id="preview-video" controls></video>
           <div id="preview-summary" class="meta"></div>
         </div>
+      </section>
+      </div>
 
+      <!-- ============ ③ 結果・分析 ============ -->
+      <div class="tab-panel single" data-panel="results" hidden>
+      <section class="col">
         <div class="card">
           <div class="card-head">
             <h2>出力ファイル</h2>
@@ -418,6 +434,7 @@
           <ul id="history-list" class="history-list"></ul>
         </div>
       </section>
+      </div>
     </main>
 
     <script src="/app.js"></script>
