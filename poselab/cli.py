@@ -200,6 +200,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--smooth", type=int, default=0, metavar="N",
         help="座標を N フレームの移動平均で平滑化してから出力 (0=無効)",
     )
+    g_out.add_argument(
+        "--mask-visibility", type=float, default=0.0, metavar="T",
+        help="visibility が T 未満のキーポイント座標を欠損 (CSV は空欄, "
+             "NPZ は NaN) として出力する。信頼度の低い (0,0) などを実検出と"
+             "誤読するのを防ぐ。0=無効 (既定)。CSV/ワイドCSV/NPZ に適用",
+    )
     g_out.add_argument("--save-video", type=Path, help="骨格を描画した動画を保存")
     g_out.add_argument(
         "--h264", action="store_true",
@@ -457,9 +463,11 @@ def _run_pose3d_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> 
 
     exporters: List[Exporter] = []
     if args.csv:
-        exporters.append(CsvExporter(args.csv))
+        exporters.append(CsvExporter(args.csv, args.mask_visibility))
     if args.wide_csv:
-        exporters.append(WideCsvExporter(args.wide_csv, H36M17_NAMES))
+        exporters.append(
+            WideCsvExporter(args.wide_csv, H36M17_NAMES, args.mask_visibility)
+        )
 
     reporter = ProgressReporter(total=None, enabled=not args.quiet)
 
@@ -505,6 +513,7 @@ def _run_pose3d_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> 
         source_type="VideoSource",
         timestamp_source="frame_index / fps (3D lifter)",
         pose3d=True,
+        mask_visibility=args.mask_visibility,
         extra={"lift_model": lift_model},
     )
     if args.summary_json:
@@ -629,6 +638,7 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
             "image-sequence" if is_static else type(source).__name__
         ),
         tracking={"enabled": will_track},
+        mask_visibility=args.mask_visibility,
     )
     metadata = provenance.embed_metadata(manifest)
     if args.smooth > 1:
@@ -637,16 +647,21 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
     def build_exporters() -> List[Exporter]:
         exporters: List[Exporter] = []
         if args.csv:
-            exporters.append(CsvExporter(args.csv))
+            exporters.append(CsvExporter(args.csv, args.mask_visibility))
         if args.wide_csv:
             from poselab.exporters import WideCsvExporter
 
-            exporters.append(WideCsvExporter(args.wide_csv, keypoint_names))
+            exporters.append(
+                WideCsvExporter(args.wide_csv, keypoint_names, args.mask_visibility)
+            )
         if args.json:
             exporters.append(JsonExporter(args.json, keypoint_names, metadata))
         if args.npz:
             exporters.append(
-                NpzExporter(args.npz, keypoint_names, args.num_poses, metadata)
+                NpzExporter(
+                    args.npz, keypoint_names, args.num_poses, metadata,
+                    args.mask_visibility,
+                )
             )
         if args.angles_csv:
             from poselab.analysis import AngleCsvExporter
