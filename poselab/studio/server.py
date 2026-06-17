@@ -305,20 +305,20 @@ def preflight(payload: dict) -> dict:
     info: dict = {}
 
     if not job["input"]:
-        warnings.append("Input video is not set.")
+        warnings.append("入力動画が設定されていません。")
     else:
         path = Path(job["input"])
         if not path.is_file():
-            warnings.append(f"Input not found: {path}")
+            warnings.append(f"入力が見つかりません: {path}")
         elif path.suffix.lower() not in VIDEO_EXTENSIONS:
-            warnings.append(f"Input may not be a video: {path.name}")
+            warnings.append(f"動画ファイルではない可能性があります: {path.name}")
         else:
             info = video_info(path)
 
     if job["output_root"]:
         parent = Path(job["output_root"]).parent
         if not parent.exists():
-            warnings.append(f"Output folder does not exist: {parent}")
+            warnings.append(f"出力先フォルダが存在しません: {parent}")
 
     if job["backend"] == "mmpose":
         try:
@@ -326,14 +326,14 @@ def preflight(payload: dict) -> dict:
 
             if importlib.util.find_spec("mmpose") is None:
                 warnings.append(
-                    "mmpose is not installed: the 3D pipeline cannot run "
-                    "(README の MMPose バックエンド参照)。"
+                    "mmpose がインストールされていません: 3D パイプラインを"
+                    "実行できません (README の MMPose バックエンド参照)。"
                 )
         except Exception:
             pass
 
     if job["reencode"] and shutil.which("ffmpeg") is None:
-        warnings.append("ffmpeg not found: H.264 re-encode will be skipped.")
+        warnings.append("ffmpeg が見つかりません: H.264 再エンコードはスキップされます。")
 
     return {"ok": True, "warnings": warnings, "info": info}
 
@@ -566,9 +566,9 @@ class JobManager:
             jobs = [normalize_job(payload)]
         for job in jobs:
             if not job["input"]:
-                return {"ok": False, "error": "Input is required."}
+                return {"ok": False, "error": "入力動画を指定してください。"}
             if not Path(job["input"]).is_file():
-                return {"ok": False, "error": f"Input not found: {job['input']}"}
+                return {"ok": False, "error": f"入力が見つかりません: {job['input']}"}
         with self._lock:
             self._queue.extend(jobs)
         self._emit_status()
@@ -578,7 +578,7 @@ class JobManager:
         with self._lock:
             target = index + offset
             if not (0 <= index < len(self._queue)):
-                return {"ok": False, "error": "Invalid queue index."}
+                return {"ok": False, "error": "キューのインデックスが不正です。"}
             target = max(0, min(len(self._queue) - 1, target))
             job = self._queue.pop(index)
             self._queue.insert(target, job)
@@ -606,9 +606,9 @@ class JobManager:
         """推定モデル一式 (検出 + 2D + 3D) を事前ダウンロードする。"""
         with self._lock:
             if self._downloading:
-                return {"ok": False, "error": "Already downloading models."}
+                return {"ok": False, "error": "すでにモデルをダウンロード中です。"}
             if self._running:
-                return {"ok": False, "error": "A job is running."}
+                return {"ok": False, "error": "ジョブの実行中です。"}
             self._downloading = True
         self._download_thread = threading.Thread(
             target=self._download_worker, args=(payload or {},),
@@ -677,9 +677,9 @@ class JobManager:
                 return result
         with self._lock:
             if self._running:
-                return {"ok": False, "error": "A job is already running."}
+                return {"ok": False, "error": "すでにジョブを実行中です。"}
             if not self._queue:
-                return {"ok": False, "error": "Queue is empty."}
+                return {"ok": False, "error": "キューが空です。"}
             self._running = True
             self._cancel.clear()
             self._worker = threading.Thread(

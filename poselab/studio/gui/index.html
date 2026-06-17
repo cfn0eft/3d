@@ -36,17 +36,17 @@
         </svg>
         <div class="brand-text">
           <strong>Pose3D Studio</strong>
-          <span>Research 3D Pose Pipeline</span>
+          <span>研究用 3D 姿勢パイプライン</span>
         </div>
       </div>
       <div class="status-pills">
         <div class="pill">
           <span>GPU</span>
-          <strong id="gpu-status">Checking...</strong>
+          <strong id="gpu-status">確認中...</strong>
         </div>
         <div class="pill">
-          <span>Server</span>
-          <strong id="server-status">Ready</strong>
+          <span>サーバー</span>
+          <strong id="server-status">準備完了</strong>
         </div>
       </div>
     </header>
@@ -57,7 +57,7 @@
         <div class="card">
           <div class="card-head">
             <h2>ジョブ設定</h2>
-            <span class="badge">inference</span>
+            <span class="badge">推論</span>
           </div>
 
           <label class="field">
@@ -184,8 +184,8 @@
           </label>
 
           <button id="run-btn" class="btn run">
-            <span>Run Pipeline</span>
-            <em id="run-hint">GPU required</em>
+            <span>実行</span>
+            <em id="run-hint">GPU 必須</em>
           </button>
         </div>
 
@@ -202,7 +202,7 @@
           <div class="card-head">
             <h2>モデルダウンロード</h2>
             <div class="progress-actions">
-              <span class="badge" id="downloads-meta">Ready</span>
+              <span class="badge" id="downloads-meta">準備完了</span>
               <button id="download-models" class="btn ghost slim">ダウンロード</button>
             </div>
           </div>
@@ -211,7 +211,7 @@
         </div>
 
         <div class="card hint">
-          <strong>Tip:</strong> 安定動作のため絶対パスを推奨します。
+          <strong>ヒント:</strong> 安定動作のため絶対パスを推奨します。
           結果 JSON / CSV は下の 3D ビューアへドラッグ & ドロップでも読み込めます。
         </div>
       </section>
@@ -222,7 +222,7 @@
           <div class="card-head">
             <h2>進捗</h2>
             <div class="progress-actions">
-              <span id="progress-text" class="mono">Idle</span>
+              <span id="progress-text" class="mono">待機中</span>
               <button id="cancel-btn" class="btn ghost warn slim">停止</button>
             </div>
           </div>
@@ -251,7 +251,7 @@
           <div class="viewer-timeline">
             <button id="viewer-play" class="btn play" title="再生 / 一時停止">▶</button>
             <input id="viewer-frame" type="range" min="0" max="0" value="0" />
-            <span id="viewer-frame-label" class="mono">Frame 0 / 0</span>
+            <span id="viewer-frame-label" class="mono">フレーム 0 / 0</span>
             <label class="viewer-fps mono">
               FPS
               <input id="viewer-fps" type="number" min="1" max="240" value="30" />
