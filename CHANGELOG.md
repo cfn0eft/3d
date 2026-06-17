@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.4 (2026-06-17)
+
+### 修正
+- **PoseLab Studio GUI の表示文言を日本語へ統一**。システムチェック
+  (preflight) の警告 (`Input video is not set.` /
+  `ffmpeg not found: H.264 re-encode will be skipped.` など) が英語のままで、
+  日本語 GUI と不統一だった。サーバー側 (`server.py`) の preflight 警告と
+  ジョブ投入・キュー・ダウンロードのエラーメッセージ、フロント側
+  (`gui/app_main.js` / `gui/index.html`) の状態表示・アラート・ログ
+  (`Run Pipeline` → `実行`、`Idle` → `待機中`、`Disconnected` → `切断`、
+  キュー/履歴/ダウンロードの各ステータス等) をすべて日本語化した。
+  固有名詞 (MMPose 等)・`value` 属性・座標系メタ値などの技術値は据え置き。
+  併せて preflight 警告の日本語化に追従するよう
+  `tests/test_studio_server.py` のアサーションを更新
+
 ## 0.9.3 (2026-06-13)
 
 ### 修正

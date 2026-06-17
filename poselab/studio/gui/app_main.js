@@ -213,7 +213,7 @@ function applyBackend() {
   const isMediapipe = currentBackend() === "mediapipe";
   if (mmposeOnly) mmposeOnly.hidden = isMediapipe;
   if (mediapipeOnly) mediapipeOnly.hidden = !isMediapipe;
-  if (runHint) runHint.textContent = isMediapipe ? "CPU 可" : "GPU required";
+  if (runHint) runHint.textContent = isMediapipe ? "CPU 可" : "GPU 必須";
   schedulePreflight();
 }
 
@@ -244,28 +244,28 @@ function renderQueue(queue, current) {
   if (currentJob && currentJob.input) {
     const item = document.createElement("li");
     const name = currentJob.input.split(/[/\\\\]/).pop();
-    item.textContent = `RUNNING: ${name}`;
+    item.textContent = `実行中: ${name}`;
     queueList.appendChild(item);
     count += 1;
   }
   queueState.forEach((job) => {
     const item = document.createElement("li");
-    const name = job.input ? job.input.split(/[/\\\\]/).pop() : "unknown";
-    item.textContent = `PENDING: ${name}`;
+    const name = job.input ? job.input.split(/[/\\\\]/).pop() : "(不明)";
+    item.textContent = `待機中: ${name}`;
     const controls = document.createElement("div");
     controls.className = "queue-controls";
     const up = document.createElement("button");
-    up.textContent = "Up";
+    up.textContent = "上へ";
     up.addEventListener("click", () => moveQueue(job, -1));
     const down = document.createElement("button");
-    down.textContent = "Down";
+    down.textContent = "下へ";
     down.addEventListener("click", () => moveQueue(job, 1));
     controls.appendChild(up);
     controls.appendChild(down);
     item.appendChild(controls);
     queueList.appendChild(item);
   });
-  queueMeta.textContent = `${count} items`;
+  queueMeta.textContent = `${count} 件`;
   updateRunLabel();
 }
 
@@ -281,7 +281,7 @@ async function moveQueue(job, offset) {
 
 function updateRunLabel() {
   const hasQueue = queueState.length > 0;
-  const label = hasQueue ? `Run Queue (${queueState.length})` : "Run Pipeline";
+  const label = hasQueue ? `キュー実行 (${queueState.length})` : "実行";
   runBtn.querySelector("span").textContent = label;
 }
 
@@ -290,7 +290,7 @@ function updateChecks(warnings, info) {
   if (!warnings || warnings.length === 0) {
     const ok = document.createElement("li");
     ok.className = "ok";
-    ok.textContent = "All checks passed.";
+    ok.textContent = "問題は見つかりませんでした。";
     checkList.appendChild(ok);
   } else {
     warnings.forEach((text) => {
@@ -301,9 +301,9 @@ function updateChecks(warnings, info) {
   }
   if (info && (info.frames || info.fps || info.duration)) {
     const parts = [];
-    if (info.frames) parts.push(`Frames: ${info.frames}`);
+    if (info.frames) parts.push(`フレーム数: ${info.frames}`);
     if (info.fps) parts.push(`FPS: ${info.fps.toFixed(2)}`);
-    if (info.duration) parts.push(`Duration: ${info.duration.toFixed(1)}s`);
+    if (info.duration) parts.push(`長さ: ${info.duration.toFixed(1)}秒`);
     videoInfo.textContent = parts.join(" | ");
   } else {
     videoInfo.textContent = "";
@@ -329,18 +329,18 @@ function renderDownloads(items) {
   if (!items || items.length === 0) {
     const item = document.createElement("li");
     item.className = "download empty";
-    item.textContent = "No downloads required.";
+    item.textContent = "ダウンロードは不要です。";
     downloadsList.appendChild(item);
-    downloadsMeta.textContent = "Ready";
+    downloadsMeta.textContent = "準備完了";
     return;
   }
 
   const counts = { ready: 0, downloading: 0, pending: 0, failed: 0 };
   const labels = {
-    ready: "Ready",
-    downloading: "Downloading",
-    pending: "Queued",
-    failed: "Failed",
+    ready: "完了",
+    downloading: "取得中",
+    pending: "待機",
+    failed: "失敗",
   };
 
   items.forEach((entry) => {
@@ -351,7 +351,7 @@ function renderDownloads(items) {
 
     const name = document.createElement("div");
     name.className = "download-name";
-    name.textContent = entry.name || "unknown";
+    name.textContent = entry.name || "(不明)";
 
     const badge = document.createElement("span");
     badge.className = `download-status ${status}`;
@@ -379,11 +379,11 @@ function renderDownloads(items) {
       }
       meta.textContent = parts.join(" ");
     } else if (status === "failed") {
-      meta.textContent = "Check logs for details.";
+      meta.textContent = "詳細はログを確認してください。";
     } else if (status === "ready") {
-      meta.textContent = "Available.";
+      meta.textContent = "取得済み。";
     } else {
-      meta.textContent = "Waiting for download.";
+      meta.textContent = "ダウンロード待ち。";
     }
 
     const item = document.createElement("li");
@@ -409,10 +409,10 @@ function renderDownloads(items) {
   });
 
   const parts = [];
-  if (counts.downloading) parts.push(`${counts.downloading} active`);
-  if (counts.pending) parts.push(`${counts.pending} queued`);
-  if (counts.failed) parts.push(`${counts.failed} failed`);
-  if (parts.length === 0) parts.push(`${counts.ready} ready`);
+  if (counts.downloading) parts.push(`${counts.downloading} 件取得中`);
+  if (counts.pending) parts.push(`${counts.pending} 件待機`);
+  if (counts.failed) parts.push(`${counts.failed} 件失敗`);
+  if (parts.length === 0) parts.push(`${counts.ready} 件完了`);
   downloadsMeta.textContent = parts.join(" • ");
   if (downloadModels) {
     const busy = counts.downloading > 0;
@@ -463,7 +463,7 @@ function setViewerPlaying(value) {
 
 function updateViewerFrameLabel() {
   const total = viewerModel ? viewerModel.frames.length : 0;
-  viewerFrameLabel.textContent = `Frame ${total ? stage3d.frame + 1 : 0} / ${total}`;
+  viewerFrameLabel.textContent = `フレーム ${total ? stage3d.frame + 1 : 0} / ${total}`;
 }
 
 function setViewerFrame(i, fromSlider = false) {
@@ -499,7 +499,7 @@ function loadViewerModel(model, sourceLabel) {
   model.personIds.forEach((id) => {
     const option = document.createElement("option");
     option.value = String(id);
-    option.textContent = `Person ${id}`;
+    option.textContent = `人物 ${id}`;
     viewerInstance.appendChild(option);
   });
 
@@ -534,7 +534,7 @@ function loadViewerModel(model, sourceLabel) {
   updateViewerFrameLabel();
   setViewerPlaying(true);
   if (sourceLabel) {
-    appendLog(`Viewer: ${sourceLabel} (${model.formatLabel}, ${model.frames.length} frames)`);
+    appendLog(`ビューア: ${sourceLabel} (${model.formatLabel}, ${model.frames.length} フレーム)`);
   }
 }
 
@@ -591,7 +591,7 @@ async function loadViewerFiles(files) {
       loadViewerModel(PoseLab3D.parseAny(text, file.name), file.name);
       return;
     } catch (err) {
-      appendLog(`Viewer: ${file.name} を読み込めませんでした (${err.message})`);
+      appendLog(`ビューア: ${file.name} を読み込めませんでした (${err.message})`);
     }
   }
 }
@@ -604,7 +604,7 @@ async function updatePreviewSummary(path) {
     const res = await fetchJSON(`/summary?path=${encodeURIComponent(path)}`);
     if (res.ok && res.summary) {
       const { frames, avg_instances, avg_score } = res.summary;
-      previewSummary.textContent = `Frames: ${frames} | Avg persons: ${avg_instances} | Avg score: ${avg_score}`;
+      previewSummary.textContent = `フレーム数: ${frames} | 平均人数: ${avg_instances} | 平均スコア: ${avg_score}`;
     }
   } catch {
     previewSummary.textContent = "";
@@ -615,14 +615,14 @@ function renderHistory(items) {
   historyList.innerHTML = "";
   if (!items || items.length === 0) {
     const item = document.createElement("li");
-    item.textContent = "No history yet.";
+    item.textContent = "履歴はまだありません。";
     historyList.appendChild(item);
     return;
   }
   items.slice().reverse().forEach((entry) => {
     const item = document.createElement("li");
-    const name = entry.input ? entry.input.split(/[/\\\\]/).pop() : "unknown";
-    const status = entry.return_code === 0 ? "SUCCESS" : "FAILED";
+    const name = entry.input ? entry.input.split(/[/\\\\]/).pop() : "(不明)";
+    const status = entry.return_code === 0 ? "成功" : "失敗";
     const time = entry.timestamp ? new Date(entry.timestamp * 1000) : null;
     const label = time ? time.toLocaleTimeString() : "";
     item.innerHTML = `<span>${status}</span><div>${name} ${label}</div>`;
@@ -650,7 +650,7 @@ async function schedulePreflight() {
       });
       updateChecks(res.warnings || [], res.info || {});
     } catch {
-      updateChecks(["Preflight check failed."], {});
+      updateChecks(["事前チェックに失敗しました。"], {});
     }
   }, 300);
 }
@@ -681,12 +681,12 @@ async function fetchJSON(url, options) {
 async function checkGPU() {
   try {
     const data = await fetchJSON("/gpu");
-    gpuStatus.textContent = data.available ? "Detected" : "Not Found";
+    gpuStatus.textContent = data.available ? "検出" : "未検出";
     gpuStatus.style.color = data.available ? "var(--ok)" : "var(--warn)";
   } catch (err) {
-    gpuStatus.textContent = "Unavailable";
+    gpuStatus.textContent = "利用不可";
     gpuStatus.style.color = "var(--warn)";
-    serverStatus.textContent = "Disconnected";
+    serverStatus.textContent = "切断";
   }
 }
 
@@ -698,16 +698,16 @@ async function enqueueInputs(paths) {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const msg = res.error || "Failed to enqueue jobs.";
+    const msg = res.error || "ジョブをキューに追加できませんでした。";
     alert(msg);
-    appendLog(`Error: ${msg}`);
+    appendLog(`エラー: ${msg}`);
   }
 }
 
 async function enqueueCurrent() {
   const payload = buildPayload();
   if (!payload.input) {
-    alert("Input is required.");
+    alert("入力動画を指定してください。");
     return;
   }
   if (!payload.output_root) {
@@ -719,9 +719,9 @@ async function enqueueCurrent() {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const msg = res.error || "Failed to enqueue job.";
+    const msg = res.error || "ジョブをキューに追加できませんでした。";
     alert(msg);
-    appendLog(`Error: ${msg}`);
+    appendLog(`エラー: ${msg}`);
   }
 }
 
@@ -729,24 +729,24 @@ async function runPipeline() {
   if (queueState.length > 0) {
     outputList.innerHTML = "";
     logOutput.textContent = "";
-    updateProgress(0, "Starting queue...");
-    serverStatus.textContent = "Running";
+    updateProgress(0, "キューを開始中...");
+    serverStatus.textContent = "実行中";
     const res = await fetchJSON("/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
     if (!res.ok) {
-      const msg = res.error || "Failed to start queue.";
+      const msg = res.error || "キューを開始できませんでした。";
       alert(msg);
-      appendLog(`Error: ${msg}`);
+      appendLog(`エラー: ${msg}`);
     }
     return;
   }
 
   const payload = buildPayload();
   if (!payload.input) {
-    alert("Input is required.");
+    alert("入力動画を指定してください。");
     return;
   }
   if (!payload.output_root) {
@@ -756,8 +756,8 @@ async function runPipeline() {
   lastOutputRoot = payload.output_root;
   outputList.innerHTML = "";
   logOutput.textContent = "";
-  updateProgress(0, "Starting...");
-  serverStatus.textContent = "Running";
+  updateProgress(0, "開始中...");
+  serverStatus.textContent = "実行中";
 
   const res = await fetchJSON("/run", {
     method: "POST",
@@ -766,9 +766,9 @@ async function runPipeline() {
   });
 
   if (!res.ok) {
-    const msg = res.error || "Failed to start job.";
+    const msg = res.error || "ジョブを開始できませんでした。";
     alert(msg);
-    appendLog(`Error: ${msg}`);
+    appendLog(`エラー: ${msg}`);
   }
 }
 
@@ -798,15 +798,15 @@ function startEvents() {
         if (data.progress > 0) {
           updateProgress(data.progress, `${data.progress}%`);
         } else if (data.running) {
-          updateProgress(0, "Running...");
+          updateProgress(0, "実行中...");
         } else {
-          updateProgress(0, "Idle");
+          updateProgress(0, "待機中");
         }
       }
       if (data.running && data.current_job) {
-        serverStatus.textContent = `Running ${data.current_job.index}/${data.current_job.total}`;
+        serverStatus.textContent = `実行中 ${data.current_job.index}/${data.current_job.total}`;
       } else {
-        serverStatus.textContent = data.running ? "Running" : "Ready";
+        serverStatus.textContent = data.running ? "実行中" : "準備完了";
       }
       runBtn.disabled = !!data.running;
       renderQueue(data.queue || [], data.current_job);
@@ -815,12 +815,12 @@ function startEvents() {
         renderDownloads(data.downloads);
       }
       if (data.running === false && data.return_code !== null) {
-        appendLog(`Process exited with code ${data.return_code}`);
+        appendLog(`プロセスがコード ${data.return_code} で終了しました`);
       }
     }
   };
   source.onerror = () => {
-    serverStatus.textContent = "Disconnected";
+    serverStatus.textContent = "切断";
   };
 }
 
@@ -831,15 +831,15 @@ async function pollStatus() {
       if (data.progress > 0) {
         updateProgress(data.progress, `${data.progress}%`);
       } else if (data.running) {
-        updateProgress(0, "Running...");
+        updateProgress(0, "実行中...");
       } else {
-        updateProgress(0, "Idle");
+        updateProgress(0, "待機中");
       }
     }
     if (data.running && data.current_job) {
-      serverStatus.textContent = `Running ${data.current_job.index}/${data.current_job.total}`;
+      serverStatus.textContent = `実行中 ${data.current_job.index}/${data.current_job.total}`;
     } else {
-      serverStatus.textContent = data.running ? "Running" : "Ready";
+      serverStatus.textContent = data.running ? "実行中" : "準備完了";
     }
     runBtn.disabled = !!data.running;
     renderQueue(data.queue || [], data.current_job);
@@ -848,7 +848,7 @@ async function pollStatus() {
       renderDownloads(data.downloads);
     }
   } catch {
-    serverStatus.textContent = "Disconnected";
+    serverStatus.textContent = "切断";
   }
 }
 
@@ -899,7 +899,7 @@ browseFolder.addEventListener("click", async () => {
   } else if (res.error) {
     alert(res.error);
   } else {
-    alert("No video files found in the folder.");
+    alert("フォルダ内に動画ファイルが見つかりません。");
   }
 });
 clearQueueBtn.addEventListener("click", async () => {
@@ -924,7 +924,7 @@ downloadModels.addEventListener("click", async () => {
   });
   if (res && res.ok === false && res.error) {
     alert(res.error);
-    appendLog(`Error: ${res.error}`);
+    appendLog(`エラー: ${res.error}`);
   }
 });
 refreshChecks.addEventListener("click", () => schedulePreflight());
@@ -1090,6 +1090,7 @@ $("viewer-export-btn").addEventListener("click", () => {
   });
   const note = o.applyView
     ? `display (axis=${stage3d.opts.axis}, y-up)` : "raw";
+  // ↑ note はエクスポートデータの座標系メタ情報 (ファイル内に記録される技術値)
   const text = spec.build(col, viewerModel, note);
   const base = (viewerModel.name || "pose")
     .replace(/\.[^.]+$/, "")
@@ -1101,7 +1102,7 @@ $("viewer-export-btn").addEventListener("click", () => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   appendLog(
-    `Viewer export: ${spec.label} (${col.records.length} frames x ${col.names.length} joints)`);
+    `ビューアエクスポート: ${spec.label} (${col.records.length} フレーム × ${col.names.length} 関節)`);
 });
 
 document.addEventListener("DOMContentLoaded", () => {

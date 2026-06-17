@@ -217,16 +217,16 @@ def test_job_output_paths_layout(tmp_path):
 
 def test_preflight_warnings(tmp_path, fake_env):
     res = preflight({"input": ""})
-    assert any("Input" in w for w in res["warnings"])
+    assert any("入力動画" in w for w in res["warnings"])
 
     res = preflight({"input": str(tmp_path / "missing.mp4")})
-    assert any("not found" in w for w in res["warnings"])
+    assert any("見つかりません" in w for w in res["warnings"])
 
     res = preflight({
         "input": str(fake_env["video"]),
         "output_root": str(tmp_path / "no_such_dir" / "out"),
     })
-    assert any("Output folder" in w for w in res["warnings"])
+    assert any("出力先フォルダ" in w for w in res["warnings"])
     assert res["ok"] is True
 
 
