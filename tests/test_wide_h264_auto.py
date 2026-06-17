@@ -1,5 +1,4 @@
 import csv
-import shutil
 
 import numpy as np
 import pytest
@@ -42,12 +41,44 @@ def test_wide_csv(tmp_path):
     assert float(rows[0]["nose_world_z"]) == pytest.approx(0.05)
 
 
+def test_find_ffmpeg_path(monkeypatch):
+    from poselab import pipeline
+
+    # PATH 上に ffmpeg があればそれを使う
+    monkeypatch.setattr(pipeline.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    assert pipeline.find_ffmpeg() == "/usr/bin/ffmpeg"
+
+
+def test_find_ffmpeg_imageio_fallback(monkeypatch):
+    import sys
+    import types
+
+    from poselab import pipeline
+
+    monkeypatch.setattr(pipeline.shutil, "which", lambda name: None)
+    fake = types.ModuleType("imageio_ffmpeg")
+    fake.get_ffmpeg_exe = lambda: "/bundled/ffmpeg"
+    monkeypatch.setitem(sys.modules, "imageio_ffmpeg", fake)
+    assert pipeline.find_ffmpeg() == "/bundled/ffmpeg"
+
+
+def test_find_ffmpeg_none(monkeypatch):
+    import sys
+
+    from poselab import pipeline
+
+    monkeypatch.setattr(pipeline.shutil, "which", lambda name: None)
+    monkeypatch.setitem(sys.modules, "imageio_ffmpeg", None)
+    assert pipeline.find_ffmpeg() is None
+
+
 def test_reencode_h264(tmp_path):
-    if shutil.which("ffmpeg") is None:
-        pytest.skip("ffmpeg not available")
     import cv2
 
-    from poselab.pipeline import reencode_h264
+    from poselab.pipeline import find_ffmpeg, reencode_h264
+
+    if find_ffmpeg() is None:
+        pytest.skip("ffmpeg not available (PATH も imageio-ffmpeg も無し)")
 
     path = tmp_path / "video.mp4"
     writer = cv2.VideoWriter(

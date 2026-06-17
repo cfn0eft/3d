@@ -265,6 +265,7 @@ def build_parser() -> argparse.ArgumentParser:
 def print_info() -> None:
     """環境診断情報を表示する。"""
     import platform
+    import shutil
 
     import cv2
     import mediapipe
@@ -295,6 +296,14 @@ def print_info() -> None:
         print(f"mmpose    : {mmpose.__version__} (--backend mmpose 利用可, device={device})")
     except ImportError:
         print("mmpose    : 未導入 (--backend mmpose / --pose3d は利用不可。README 参照)")
+    from poselab.pipeline import find_ffmpeg
+
+    ffmpeg = find_ffmpeg()
+    if ffmpeg:
+        via = "PATH" if shutil.which("ffmpeg") else "imageio-ffmpeg (同梱)"
+        print(f"ffmpeg    : 利用可能 ({via}) — H.264 再エンコード可")
+    else:
+        print("ffmpeg    : 見つかりません (pip install imageio-ffmpeg で自動取得)")
     cache = default_cache_dir()
     print(f"モデルキャッシュ: {cache}")
     for variant in MODEL_VARIANTS:

@@ -42,18 +42,36 @@ class VideoWriter:
             self._writer.release()
 
 
+def find_ffmpeg() -> "str | None":
+    """ffmpeg 実行ファイルのパスを返す。
+
+    1) PATH 上の ffmpeg、2) なければ imageio-ffmpeg が同梱する静的ビルドを
+    使う (pip インストール時に取得される)。どちらも無ければ None。
+    """
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
 def reencode_h264(path: "str | Path") -> bool:
     """動画を H.264 (yuv420p, faststart) に再エンコードする。
 
     ブラウザや多くのプレーヤーで再生できる形式にする。ffmpeg が
-    PATH にない場合は何もせず False を返す。
+    見つからない場合は何もせず False を返す。
     """
-    if shutil.which("ffmpeg") is None:
+    ffmpeg = find_ffmpeg()
+    if ffmpeg is None:
         return False
     path = Path(path)
     tmp = path.with_name(path.stem + ".h264tmp.mp4")
     cmd = [
-        "ffmpeg", "-y", "-loglevel", "error",
+        ffmpeg, "-y", "-loglevel", "error",
         "-i", str(path),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
         "-pix_fmt", "yuv420p", "-movflags", "+faststart",
