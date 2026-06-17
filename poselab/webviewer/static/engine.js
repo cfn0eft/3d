@@ -1214,3 +1214,234 @@ const EXPORT_FORMATS = {
   },
 };
 
+/* ================================================================
+   解析 — 関節角度 / 速度 / 左右対称性 (DOM 非依存のピュア関数群)
+   poselab/analysis.py・kinematics.py の定義をブラウザ側へ移植したもの。
+   ビューアの対話型分析や平滑化プレビューで使う。座標は raw (パース時の
+   モデル座標) を用い、表示変換は考慮しない (角度・速度は座標系不変)。
+   ================================================================ */
+
+// 角度名 -> [始点, 頂点, 終点] のランドマーク名 (analysis.py ANGLE_DEFINITIONS)
+const ANGLE_DEFS = {
+  left_elbow: ["left_shoulder", "left_elbow", "left_wrist"],
+  right_elbow: ["right_shoulder", "right_elbow", "right_wrist"],
+  left_shoulder: ["left_elbow", "left_shoulder", "left_hip"],
+  right_shoulder: ["right_elbow", "right_shoulder", "right_hip"],
+  left_hip: ["left_shoulder", "left_hip", "left_knee"],
+  right_hip: ["right_shoulder", "right_hip", "right_knee"],
+  left_knee: ["left_hip", "left_knee", "left_ankle"],
+  right_knee: ["right_hip", "right_knee", "right_ankle"],
+  left_ankle: ["left_knee", "left_ankle", "left_foot_index"],
+  right_ankle: ["right_knee", "right_ankle", "right_foot_index"],
+};
+
+// 左右対称性を評価する関節角度ペア [基準名, 左角度, 右角度] (kinematics.py)
+const SYMMETRY_PAIRS = [
+  ["elbow", "left_elbow", "right_elbow"],
+  ["shoulder", "left_shoulder", "right_shoulder"],
+  ["hip", "left_hip", "right_hip"],
+  ["knee", "left_knee", "right_knee"],
+  ["ankle", "left_ankle", "right_ankle"],
+];
+
+// 名前 -> インデックスの索引 (小文字照合)
+function landmarkIndex(model) {
+  const map = {};
+  model.names.forEach((n, i) => { map[String(n).toLowerCase()] = i; });
+  return map;
+}
+
+// vertex (b) を頂点とした a-b-c のなす角を度で返す (0-180)。無効なら null。
+function angleDeg(a, b, c) {
+  if (!a || !b || !c) return null;
+  const v1 = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const v2 = [c[0] - b[0], c[1] - b[1], c[2] - b[2]];
+  const n1 = Math.hypot(v1[0], v1[1], v1[2]);
+  const n2 = Math.hypot(v2[0], v2[1], v2[2]);
+  if (n1 < 1e-9 || n2 < 1e-9) return null;
+  let cos = (v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]) / (n1 * n2);
+  cos = clamp(cos, -1, 1);
+  return (Math.acos(cos) * 180) / Math.PI;
+}
+
+// 左右の非対称度 (Symmetry Index) = |L-R| / ((|L|+|R|)/2)。両方 0 なら 0。
+function symmetryIndex(left, right) {
+  const denom = (Math.abs(left) + Math.abs(right)) / 2;
+  if (denom < 1e-9) return 0;
+  return Math.abs(left - right) / denom;
+}
+
+function _personAt(frame, personId) {
+  if (personId == null) return frame.persons[0] || null;
+  return frame.persons.find((p) => p.id === personId) || null;
+}
+
+function _coord(person, idx) {
+  if (!person || idx == null || idx < 0 || !person.ok[idx]) return null;
+  return [person.pts[idx * 3], person.pts[idx * 3 + 1], person.pts[idx * 3 + 2]];
+}
+
+// 系列の移動平均 (null は欠損として窓内の有効値のみ平均)。
+function smoothSeries(values, window) {
+  const w = Math.max(1, Math.floor(window));
+  if (w <= 1) return values.slice();
+  const half = Math.floor(w / 2);
+  const out = new Array(values.length).fill(null);
+  for (let i = 0; i < values.length; i += 1) {
+    if (values[i] == null) continue;
+    let sum = 0;
+    let n = 0;
+    for (let k = i - half; k <= i + half; k += 1) {
+      if (k < 0 || k >= values.length) continue;
+      if (values[k] == null) continue;
+      sum += values[k];
+      n += 1;
+    }
+    out[i] = n ? sum / n : values[i];
+  }
+  return out;
+}
+
+// このモデルで計算可能な指標の一覧を返す。
+//   { angles:[{key,label}], joints:[{index,name}], symmetry:[{key,label}] }
+function availableMetrics(model) {
+  const idx = landmarkIndex(model);
+  const has = (name) => idx[String(name).toLowerCase()] != null;
+  const angles = Object.keys(ANGLE_DEFS)
+    .filter((key) => ANGLE_DEFS[key].every(has))
+    .map((key) => ({ key, label: key }));
+  const symmetry = SYMMETRY_PAIRS
+    .filter(([, l, r]) => ANGLE_DEFS[l].every(has) && ANGLE_DEFS[r].every(has))
+    .map(([key]) => ({ key, label: key }));
+  const joints = model.names.map((name, index) => ({ index, name }));
+  return { angles, joints, symmetry };
+}
+
+// 指定人物の指標を全フレーム分の系列で返す。
+//   opts: { person:id|null, metric:{type,key|joint}, window }
+//   戻り値: { values:(number|null)[], times:number[], unit, label }
+function metricSeries(model, opts = {}) {
+  const { person = null, metric = {}, window = 0 } = opts;
+  const F = model.frames.length;
+  const fps = model.fps || 30;
+  const idx = landmarkIndex(model);
+  const times = model.frames.map((f, i) => (f.t != null ? f.t : i / fps));
+  let values = new Array(F).fill(null);
+  let unit = "";
+  let label = "";
+
+  if (metric.type === "angle") {
+    const def = ANGLE_DEFS[metric.key];
+    unit = "°";
+    label = `${metric.key} 角度`;
+    if (def) {
+      const [ai, bi, ci] = def.map((n) => idx[n]);
+      for (let i = 0; i < F; i += 1) {
+        const p = _personAt(model.frames[i], person);
+        values[i] = angleDeg(_coord(p, ai), _coord(p, bi), _coord(p, ci));
+      }
+    }
+  } else if (metric.type === "speed") {
+    const j = metric.joint;
+    unit = "u/s";
+    label = `${model.names[j] || `kpt_${j}`} 速度`;
+    let prev = null;
+    let prevT = null;
+    for (let i = 0; i < F; i += 1) {
+      const c = _coord(_personAt(model.frames[i], person), j);
+      if (c && prev) {
+        const dt = times[i] - prevT;
+        values[i] = dt > 1e-9
+          ? Math.hypot(c[0] - prev[0], c[1] - prev[1], c[2] - prev[2]) / dt
+          : null;
+      }
+      prev = c;
+      prevT = times[i];
+    }
+  } else if (metric.type === "symmetry") {
+    const pair = SYMMETRY_PAIRS.find((s) => s[0] === metric.key);
+    unit = "SI";
+    label = `${metric.key} 左右対称性`;
+    if (pair) {
+      const li = ANGLE_DEFS[pair[1]].map((n) => idx[n]);
+      const ri = ANGLE_DEFS[pair[2]].map((n) => idx[n]);
+      for (let i = 0; i < F; i += 1) {
+        const p = _personAt(model.frames[i], person);
+        const L = angleDeg(_coord(p, li[0]), _coord(p, li[1]), _coord(p, li[2]));
+        const R = angleDeg(_coord(p, ri[0]), _coord(p, ri[1]), _coord(p, ri[2]));
+        values[i] = L != null && R != null ? symmetryIndex(L, R) : null;
+      }
+    }
+  }
+
+  if (window > 1) values = smoothSeries(values, window);
+  return { values, times, unit, label };
+}
+
+// 系列の要約統計 (null は除外)。
+function seriesStats(values) {
+  const v = values.filter((x) => x != null && Number.isFinite(x));
+  if (!v.length) return { n: 0, mean: null, min: null, max: null, range: null, std: null };
+  let min = Infinity;
+  let max = -Infinity;
+  let sum = 0;
+  for (const x of v) { if (x < min) min = x; if (x > max) max = x; sum += x; }
+  const mean = sum / v.length;
+  let sq = 0;
+  for (const x of v) sq += (x - mean) * (x - mean);
+  const std = Math.sqrt(sq / v.length);
+  return { n: v.length, mean, min, max, range: max - min, std };
+}
+
+// 全関節・全人物の座標をフレーム方向に移動平均した新しいモデルを返す。
+// names/edges/personIds/fps/defaultAxis は元モデルから引き継ぐ (構造不変)。
+function smoothModel(model, window) {
+  const w = Math.max(1, Math.floor(window));
+  if (w <= 1) return model;
+  const half = Math.floor(w / 2);
+  const J = model.names.length;
+  const F = model.frames.length;
+  // 人物 id ごとに各フレームの person 参照を並べる (欠落フレームは null)
+  const byId = new Map(model.personIds.map((id) => [id, new Array(F).fill(null)]));
+  model.frames.forEach((f, fi) => {
+    f.persons.forEach((p) => { if (byId.has(p.id)) byId.get(p.id)[fi] = p; });
+  });
+  const smoothed = new Map();
+  byId.forEach((arr, id) => {
+    const outArr = new Array(F).fill(null);
+    for (let fi = 0; fi < F; fi += 1) {
+      const cur = arr[fi];
+      if (!cur) continue;
+      const pts = new Float64Array(J * 3);
+      for (let j = 0; j < J; j += 1) {
+        if (!cur.ok[j]) {
+          pts[j * 3] = cur.pts[j * 3];
+          pts[j * 3 + 1] = cur.pts[j * 3 + 1];
+          pts[j * 3 + 2] = cur.pts[j * 3 + 2];
+          continue;
+        }
+        let sx = 0; let sy = 0; let sz = 0; let n = 0;
+        for (let k = fi - half; k <= fi + half; k += 1) {
+          if (k < 0 || k >= F) continue;
+          const pk = arr[k];
+          if (!pk || !pk.ok[j]) continue;
+          sx += pk.pts[j * 3]; sy += pk.pts[j * 3 + 1]; sz += pk.pts[j * 3 + 2]; n += 1;
+        }
+        if (n) { pts[j * 3] = sx / n; pts[j * 3 + 1] = sy / n; pts[j * 3 + 2] = sz / n; }
+        else {
+          pts[j * 3] = cur.pts[j * 3];
+          pts[j * 3 + 1] = cur.pts[j * 3 + 1];
+          pts[j * 3 + 2] = cur.pts[j * 3 + 2];
+        }
+      }
+      outArr[fi] = { id, pts, ok: cur.ok };
+    }
+    smoothed.set(id, outArr);
+  });
+  const frames = model.frames.map((f, fi) => ({
+    t: f.t,
+    persons: f.persons.map((p) => smoothed.get(p.id)?.[fi] || p),
+  }));
+  return { ...model, frames };
+}
+

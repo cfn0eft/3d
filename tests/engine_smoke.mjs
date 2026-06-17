@@ -22,7 +22,8 @@ const source = readFileSync(enginePath, "utf8");
 const context = vm.createContext({});
 const api = vm.runInContext(
   source +
-    "\n;({ parseAny, demoModel, collectExport, EXPORT_FORMATS, MP_NAMES });",
+    "\n;({ parseAny, demoModel, collectExport, EXPORT_FORMATS, MP_NAMES," +
+    " availableMetrics, metricSeries, seriesStats, smoothModel });",
   context,
   { filename: "engine.js" },
 );
@@ -104,6 +105,51 @@ check(mm.frames.length === 1, "mmpose: 1 フレーム");
 check(mm.names.join(",") === "root,left_hip,right_hip", "mmpose: 関節名");
 check(mm.edges.length === 2, "mmpose: 骨格リンク");
 check(mm.defaultAxis === "zup", "mmpose: H36M 系は z-up が既定");
+
+/* 4. 解析ヘルパ (関節角度 / 速度 / 対称性 / 平滑化) */
+const metrics = api.availableMetrics(demo);
+check(metrics.angles.some((a) => a.key === "left_knee"),
+  "availableMetrics: MediaPipe は left_knee 角度を計算可能");
+check(metrics.symmetry.some((s) => s.key === "knee"),
+  "availableMetrics: 膝の左右対称性が計算可能");
+check(metrics.joints.length === demo.names.length,
+  "availableMetrics: 速度対象は全関節");
+
+const angleSeries = api.metricSeries(demo, {
+  person: demo.personIds[0],
+  metric: { type: "angle", key: "left_knee" },
+});
+check(angleSeries.values.length === demo.frames.length,
+  "metricSeries: 角度系列長 = フレーム数");
+check(angleSeries.unit === "°", "metricSeries: 角度の単位");
+const angStats = api.seriesStats(angleSeries.values);
+check(angStats.n > 0, "seriesStats: 有効サンプルがある");
+check(angStats.min >= 0 && angStats.max <= 180,
+  "metricSeries: 関節角度は 0-180 度の範囲");
+
+const speedSeries = api.metricSeries(demo, {
+  person: demo.personIds[0],
+  metric: { type: "speed", joint: 0 },
+});
+check(speedSeries.values[0] == null, "metricSeries: 速度の先頭フレームは null");
+check(api.seriesStats(speedSeries.values).n > 0, "metricSeries: 速度が計算される");
+
+const symSeries = api.metricSeries(demo, {
+  person: demo.personIds[0],
+  metric: { type: "symmetry", key: "knee" },
+});
+check(api.seriesStats(symSeries.values).min >= 0,
+  "metricSeries: 対称性指標は非負");
+
+// 平滑化はモデル構造 (フレーム数・関節数・人数) を保つ
+const sm = api.smoothModel(demo, 5);
+check(sm.frames.length === demo.frames.length, "smoothModel: フレーム数不変");
+check(sm.names.length === demo.names.length, "smoothModel: 関節数不変");
+check(sm.personIds.length === demo.personIds.length, "smoothModel: 人数不変");
+check(sm !== demo && sm.frames !== demo.frames,
+  "smoothModel: 元モデルを破壊しない (新オブジェクト)");
+// window<=1 は元モデルをそのまま返す
+check(api.smoothModel(demo, 1) === demo, "smoothModel: 窓 1 は無変換");
 
 if (failures > 0) {
   console.error(`engine smoke: ${failures} 件失敗`);
