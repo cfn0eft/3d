@@ -54,6 +54,8 @@ window.PoseLab3D = {
   PoseStage, parseAny, demoModel, findJoint, sideOf, PERSON_HUES,
   collectExport, exportWideCsv, exportLongCsv, exportPoselabJson,
   exportMmposeJson, EXPORT_FORMATS,
+  availableMetrics, metricSeries, seriesStats, smoothModel,
+  ANGLE_DEFS, SYMMETRY_PAIRS,
 };
 })();
 """

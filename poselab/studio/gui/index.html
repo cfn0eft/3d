@@ -152,88 +152,98 @@
             <small>自動: 動画と同じ場所 + 動画名のフォルダ。</small>
           </label>
 
-          <div class="field">
-            <span>処理オプション</span>
-            <div class="switch-grid">
-              <label class="switch-row">
-                <span>H.264 再エンコード</span>
-                <input id="reencode" type="checkbox" checked /><i></i>
-              </label>
-              <label class="switch-row">
-                <span>進捗バー表示</span>
-                <input id="progress" type="checkbox" checked /><i></i>
+          <details class="adv">
+            <summary>処理・出力オプション</summary>
+            <div class="adv-body">
+              <div class="field">
+                <span>処理オプション</span>
+                <div class="switch-grid">
+                  <label class="switch-row">
+                    <span>H.264 再エンコード</span>
+                    <input id="reencode" type="checkbox" checked /><i></i>
+                  </label>
+                  <label class="switch-row">
+                    <span>進捗バー表示</span>
+                    <input id="progress" type="checkbox" checked /><i></i>
+                  </label>
+                </div>
+              </div>
+
+              <div class="field">
+                <span>出力オプション</span>
+                <div class="switch-grid">
+                  <label class="switch-row">
+                    <span>腰を原点に固定</span>
+                    <input id="center-root" type="checkbox" checked /><i></i>
+                  </label>
+                  <label class="switch-row">
+                    <span>体格スケール正規化</span>
+                    <input id="normalize-scale" type="checkbox" /><i></i>
+                  </label>
+                </div>
+                <small>root=pelvis、scale=root→thorax を基準に正規化します。</small>
+              </div>
+
+              <label class="field">
+                <span>CSV 形式</span>
+                <select id="csv-format">
+                  <option value="wide">wide (1 行 = 1 フレーム)</option>
+                  <option value="long">long (1 行 = 1 キーポイント)</option>
+                  <option value="both" selected>both (両方)</option>
+                </select>
               </label>
             </div>
-          </div>
+          </details>
 
-          <div class="field">
-            <span>出力オプション</span>
-            <div class="switch-grid">
-              <label class="switch-row">
-                <span>腰を原点に固定</span>
-                <input id="center-root" type="checkbox" checked /><i></i>
+          <details class="adv">
+            <summary>分析・後処理 (角度 / 速度 / 平滑化 / マスク)</summary>
+            <div class="adv-body">
+              <div class="field">
+                <span>分析出力</span>
+                <div class="switch-grid">
+                  <label class="switch-row">
+                    <span>関節角度 CSV</span>
+                    <input id="out-angles" type="checkbox" /><i></i>
+                  </label>
+                  <label class="switch-row">
+                    <span>速度・加速度 CSV</span>
+                    <input id="out-velocity" type="checkbox" /><i></i>
+                  </label>
+                  <label class="switch-row">
+                    <span>左右対称性 CSV</span>
+                    <input id="out-symmetry" type="checkbox" /><i></i>
+                  </label>
+                </div>
+                <small>角度・速度・対称性は MediaPipe バックエンドで出力されます。</small>
+              </div>
+
+              <label class="field">
+                <span>平滑化</span>
+                <select id="smooth-method">
+                  <option value="moving" selected>移動平均</option>
+                  <option value="median">メディアン (外れ値に強い)</option>
+                  <option value="butter">Butterworth (ゼロ位相)</option>
+                </select>
+                <div class="field-row">
+                  <input id="smooth-window" type="number" min="0" value="0"
+                         placeholder="窓フレーム数" title="移動平均/メディアンの窓 (0=無効)" />
+                  <input id="smooth-cutoff" type="number" min="0" step="0.5"
+                         placeholder="cutoff Hz" title="Butterworth のカットオフ周波数" />
+                </div>
+                <label class="switch-row">
+                  <span>visibility 加重 (移動平均)</span>
+                  <input id="smooth-weighted" type="checkbox" /><i></i>
+                </label>
+                <small>移動平均/メディアンは窓フレーム数、Butterworth はカットオフ Hz を使用 (MediaPipe のみ)。</small>
               </label>
-              <label class="switch-row">
-                <span>体格スケール正規化</span>
-                <input id="normalize-scale" type="checkbox" /><i></i>
+
+              <label class="field">
+                <span>低信頼度マスキング (visibility 閾値)</span>
+                <input id="mask-visibility" type="number" min="0" max="1" step="0.05" value="0" />
+                <small>閾値未満の座標を欠損として出力 (0=無効)。両バックエンド対応。</small>
               </label>
             </div>
-            <small>root=pelvis、scale=root→thorax を基準に正規化します。</small>
-          </div>
-
-          <label class="field">
-            <span>CSV 形式</span>
-            <select id="csv-format">
-              <option value="wide">wide (1 行 = 1 フレーム)</option>
-              <option value="long">long (1 行 = 1 キーポイント)</option>
-              <option value="both" selected>both (両方)</option>
-            </select>
-          </label>
-
-          <div class="field">
-            <span>分析出力</span>
-            <div class="switch-grid">
-              <label class="switch-row">
-                <span>関節角度 CSV</span>
-                <input id="out-angles" type="checkbox" /><i></i>
-              </label>
-              <label class="switch-row">
-                <span>速度・加速度 CSV</span>
-                <input id="out-velocity" type="checkbox" /><i></i>
-              </label>
-              <label class="switch-row">
-                <span>左右対称性 CSV</span>
-                <input id="out-symmetry" type="checkbox" /><i></i>
-              </label>
-            </div>
-            <small>角度・速度・対称性は MediaPipe バックエンドで出力されます。</small>
-          </div>
-
-          <label class="field">
-            <span>平滑化</span>
-            <select id="smooth-method">
-              <option value="moving" selected>移動平均</option>
-              <option value="median">メディアン (外れ値に強い)</option>
-              <option value="butter">Butterworth (ゼロ位相)</option>
-            </select>
-            <div class="field-row">
-              <input id="smooth-window" type="number" min="0" value="0"
-                     placeholder="窓フレーム数" title="移動平均/メディアンの窓 (0=無効)" />
-              <input id="smooth-cutoff" type="number" min="0" step="0.5"
-                     placeholder="cutoff Hz" title="Butterworth のカットオフ周波数" />
-            </div>
-            <label class="switch-row">
-              <span>visibility 加重 (移動平均)</span>
-              <input id="smooth-weighted" type="checkbox" /><i></i>
-            </label>
-            <small>移動平均/メディアンは窓フレーム数、Butterworth はカットオフ Hz を使用 (MediaPipe のみ)。</small>
-          </label>
-
-          <label class="field">
-            <span>低信頼度マスキング (visibility 閾値)</span>
-            <input id="mask-visibility" type="number" min="0" max="1" step="0.05" value="0" />
-            <small>閾値未満の座標を欠損として出力 (0=無効)。両バックエンド対応。</small>
-          </label>
+          </details>
 
           <button id="run-btn" class="btn run">
             <span>実行</span>
@@ -334,6 +344,10 @@
               スケール
               <input id="viewer-scale" type="range" min="0.4" max="2.5" step="0.05" value="1" />
             </label>
+            <label class="vc" title="表示と分析に効く移動平均の窓フレーム数 (0/1=無効)">
+              平滑化窓
+              <input id="viewer-smooth" type="number" min="0" max="61" step="1" value="0" />
+            </label>
             <label class="vc">
               水平回転
               <input id="viewer-yaw" type="range" min="-180" max="180" step="1" value="-32" />
@@ -411,6 +425,56 @@
       <!-- ============ ③ 結果・分析 ============ -->
       <div class="tab-panel single" data-panel="results" hidden>
       <section class="col">
+        <div class="card analysis-card">
+          <div class="card-head">
+            <h2>対話型分析</h2>
+            <div class="analysis-actions">
+              <span class="badge" id="analysis-source">データ未読込</span>
+              <button id="analysis-open" class="btn ghost slim">JSON/CSV を開く</button>
+            </div>
+          </div>
+          <div class="analysis-controls">
+            <label class="vc">
+              指標
+              <select id="analysis-metric">
+                <option value="angle" selected>関節角度</option>
+                <option value="speed">速度</option>
+                <option value="symmetry">左右対称性 (SI)</option>
+              </select>
+            </label>
+            <label class="vc">
+              対象
+              <select id="analysis-target"></select>
+            </label>
+            <label class="vc">
+              人物
+              <select id="analysis-person"></select>
+            </label>
+            <label class="vc">
+              平滑化窓
+              <input id="analysis-window" type="number" min="0" max="61" step="1" value="0"
+                     title="系列に効く移動平均の窓フレーム数 (0/1=無効)" />
+            </label>
+            <label class="vc">
+              フレーム範囲
+              <span class="range-inputs mono">
+                <input type="number" id="analysis-start" min="1" value="1" />
+                <em>–</em>
+                <input type="number" id="analysis-end" min="1" value="1" />
+              </span>
+            </label>
+          </div>
+          <div class="analysis-chart-wrap">
+            <canvas id="analysis-chart"></canvas>
+            <div id="analysis-empty" class="analysis-empty mono">
+              ビューアに結果 (JSON/CSV) を読み込むか「JSON/CSV を開く」で分析できます。
+            </div>
+          </div>
+          <div id="analysis-stats" class="analysis-stats"></div>
+          <small class="analysis-hint">角度・速度・対称性はブラウザ上で raw 座標から計算します。数値を変えると即時更新。</small>
+          <input id="analysis-file" type="file" accept=".json,.csv" hidden />
+        </div>
+
         <div class="card">
           <div class="card-head">
             <h2>出力ファイル</h2>

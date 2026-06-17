@@ -67,6 +67,7 @@ const viewerReset = $("viewer-reset");
 const viewerOpen = $("viewer-open");
 const viewerDemo = $("viewer-demo");
 const viewerFile = $("viewer-file");
+const viewerSmooth = $("viewer-smooth");
 
 let lastOutputRoot = "";
 let outputAuto = true;
@@ -1114,6 +1115,277 @@ $("viewer-export-btn").addEventListener("click", () => {
     `ビューアエクスポート: ${spec.label} (${col.records.length} フレーム × ${col.names.length} 関節)`);
 });
 
+/* ----- ビューアのライブ平滑化 (数値を変えると 3D 表示が即再計算) ----- */
+
+// viewerModel (raw) はエクスポート/分析の真値として保持し、表示モデルだけ
+// 差し替える。setModel を使わずカメラ/フレーム/選択を維持して入れ替える。
+function applyViewerSmoothing() {
+  if (!viewerModel) return;
+  const w = parseInt(viewerSmooth.value, 10) || 0;
+  const display = w > 1 ? PoseLab3D.smoothModel(viewerModel, w) : viewerModel;
+  const keepFrame = stage3d.frame;
+  const keepVisible = new Set(stage3d.visible);
+  stage3d.model = display;
+  stage3d.frame = Math.min(keepFrame, display.frames.length - 1);
+  stage3d.visible = keepVisible;
+  stage3d.dirty = true;
+}
+
+if (viewerSmooth) {
+  viewerSmooth.addEventListener("input", applyViewerSmoothing);
+}
+
+/* ----- 結果・分析タブ: 対話型分析 (角度 / 速度 / 対称性) ----- */
+
+const analysisMetric = $("analysis-metric");
+const analysisTarget = $("analysis-target");
+const analysisPerson = $("analysis-person");
+const analysisWindow = $("analysis-window");
+const analysisStart = $("analysis-start");
+const analysisEnd = $("analysis-end");
+const analysisChart = $("analysis-chart");
+const analysisEmpty = $("analysis-empty");
+const analysisStats = $("analysis-stats");
+const analysisSource = $("analysis-source");
+const analysisOpen = $("analysis-open");
+const analysisFile = $("analysis-file");
+
+let analysisModel = null;
+let analysisMetrics = null;
+
+function populateAnalysisTarget() {
+  if (!analysisMetrics) return;
+  const type = analysisMetric.value;
+  const prev = analysisTarget.value;
+  analysisTarget.innerHTML = "";
+  let items = [];
+  if (type === "angle") {
+    items = analysisMetrics.angles.map((a) => ({ value: a.key, label: a.label }));
+  } else if (type === "speed") {
+    items = analysisMetrics.joints.map((j) => ({ value: String(j.index), label: j.name }));
+  } else if (type === "symmetry") {
+    items = analysisMetrics.symmetry.map((s) => ({ value: s.key, label: s.label }));
+  }
+  if (!items.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "(対象なし)";
+    analysisTarget.appendChild(opt);
+    return;
+  }
+  items.forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    analysisTarget.appendChild(opt);
+  });
+  // 同じ対象が残っていれば選択を維持
+  if ([...analysisTarget.options].some((o) => o.value === prev)) {
+    analysisTarget.value = prev;
+  }
+}
+
+function refreshAnalysisControls() {
+  if (!analysisModel) return;
+  analysisMetrics = PoseLab3D.availableMetrics(analysisModel);
+  populateAnalysisTarget();
+
+  analysisPerson.innerHTML = "";
+  analysisModel.personIds.forEach((id) => {
+    const opt = document.createElement("option");
+    opt.value = String(id);
+    opt.textContent = `人物 ${id}`;
+    analysisPerson.appendChild(opt);
+  });
+
+  const total = analysisModel.frames.length;
+  analysisStart.max = String(total);
+  analysisEnd.max = String(total);
+  analysisStart.value = "1";
+  analysisEnd.value = String(total);
+}
+
+function setAnalysisModel(model, label) {
+  analysisModel = model;
+  analysisSource.textContent = label
+    ? `${label} (${model.frames.length}f)`
+    : `${model.frames.length} フレーム`;
+  refreshAnalysisControls();
+  updateAnalysis();
+}
+
+function currentAnalysisMetric() {
+  const type = analysisMetric.value;
+  const target = analysisTarget.value;
+  if (type === "speed") return { type, joint: Number(target) };
+  return { type, key: target };
+}
+
+function formatStat(value, unit) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const v = Math.abs(value) >= 100 ? value.toFixed(1) : value.toFixed(2);
+  return unit ? `${v} ${unit}` : v;
+}
+
+function renderAnalysisStats(stats, unit) {
+  const rows = [
+    ["有効", `${stats.n} f`],
+    ["平均", formatStat(stats.mean, unit)],
+    ["最小", formatStat(stats.min, unit)],
+    ["最大", formatStat(stats.max, unit)],
+    ["範囲", formatStat(stats.range, unit)],
+    ["標準偏差", formatStat(stats.std, unit)],
+  ];
+  analysisStats.innerHTML = "";
+  rows.forEach(([label, value]) => {
+    const cell = document.createElement("div");
+    cell.className = "stat";
+    cell.innerHTML = `<span>${label}</span><strong class="mono">${value}</strong>`;
+    analysisStats.appendChild(cell);
+  });
+}
+
+function drawAnalysisChart(times, values, unit, label) {
+  const canvas = analysisChart;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 600;
+  const cssH = canvas.clientHeight || 240;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const padL = 52;
+  const padR = 12;
+  const padT = 14;
+  const padB = 26;
+  const plotW = Math.max(1, cssW - padL - padR);
+  const plotH = Math.max(1, cssH - padT - padB);
+
+  const css = getComputedStyle(document.body);
+  const line = css.getPropertyValue("--line").trim() || "rgba(255,255,255,0.09)";
+  const accent = css.getPropertyValue("--accent").trim() || "#8b93ff";
+  const faint = css.getPropertyValue("--text-faint").trim() || "#6b6b76";
+
+  const valid = values.filter((v) => v != null && Number.isFinite(v));
+  if (!valid.length) {
+    ctx.fillStyle = faint;
+    ctx.font = "12px " + (css.getPropertyValue("--mono").trim() || "monospace");
+    ctx.fillText("有効なデータがありません", padL, padT + plotH / 2);
+    return;
+  }
+  let lo = Math.min(...valid);
+  let hi = Math.max(...valid);
+  if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.08;
+  lo -= pad; hi += pad;
+
+  const t0 = times[0];
+  const t1 = times[times.length - 1];
+  const span = t1 - t0 > 1e-9 ? t1 - t0 : 1;
+  const xOf = (i) => padL + ((times[i] - t0) / span) * plotW;
+  const yOf = (v) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
+
+  // グリッド + 軸ラベル
+  ctx.strokeStyle = line;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = faint;
+  ctx.font = "10px " + (css.getPropertyValue("--mono").trim() || "monospace");
+  ctx.textBaseline = "middle";
+  for (let g = 0; g <= 4; g += 1) {
+    const y = padT + (g / 4) * plotH;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + plotW, y);
+    ctx.stroke();
+    const val = hi - (g / 4) * (hi - lo);
+    ctx.textAlign = "right";
+    ctx.fillText(val.toFixed(Math.abs(val) >= 100 ? 0 : 1), padL - 6, y);
+  }
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(`${t0.toFixed(2)}s`, padL, padT + plotH + 6);
+  ctx.fillText(`${t1.toFixed(2)}s`, padL + plotW, padT + plotH + 6);
+  ctx.textAlign = "left";
+  ctx.fillText(`${label}${unit ? ` [${unit}]` : ""}`, padL + 4, padT + 2);
+
+  // 折れ線 (null は途切れさせる)
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  let pen = false;
+  for (let i = 0; i < values.length; i += 1) {
+    const v = values[i];
+    if (v == null || !Number.isFinite(v)) { pen = false; continue; }
+    const x = xOf(i);
+    const y = yOf(v);
+    if (!pen) { ctx.moveTo(x, y); pen = true; } else { ctx.lineTo(x, y); }
+  }
+  ctx.stroke();
+}
+
+function updateAnalysis() {
+  if (!analysisModel) {
+    if (analysisEmpty) analysisEmpty.hidden = false;
+    if (analysisStats) analysisStats.innerHTML = "";
+    return;
+  }
+  if (analysisEmpty) analysisEmpty.hidden = true;
+
+  const person = Number(analysisPerson.value);
+  const win = parseInt(analysisWindow.value, 10) || 0;
+  const metric = currentAnalysisMetric();
+  if ((metric.type === "speed" && Number.isNaN(metric.joint))
+      || (metric.type !== "speed" && !metric.key)) {
+    drawAnalysisChart([0, 1], [null, null], "", "");
+    renderAnalysisStats(PoseLab3D.seriesStats([]), "");
+    return;
+  }
+
+  const series = PoseLab3D.metricSeries(analysisModel, {
+    person: Number.isNaN(person) ? null : person,
+    metric,
+    window: win,
+  });
+
+  const total = series.values.length;
+  let start = (parseInt(analysisStart.value, 10) || 1) - 1;
+  let end = (parseInt(analysisEnd.value, 10) || total) - 1;
+  start = Math.max(0, Math.min(start, total - 1));
+  end = Math.max(start, Math.min(end, total - 1));
+  const values = series.values.slice(start, end + 1);
+  const times = series.times.slice(start, end + 1);
+
+  drawAnalysisChart(times, values, series.unit, series.label);
+  renderAnalysisStats(PoseLab3D.seriesStats(values), series.unit);
+}
+
+analysisMetric.addEventListener("change", () => {
+  populateAnalysisTarget();
+  updateAnalysis();
+});
+[analysisTarget, analysisPerson].forEach((el) =>
+  el.addEventListener("change", updateAnalysis));
+[analysisWindow, analysisStart, analysisEnd].forEach((el) =>
+  el.addEventListener("input", updateAnalysis));
+analysisOpen.addEventListener("click", () => analysisFile.click());
+analysisFile.addEventListener("change", async () => {
+  const file = analysisFile.files[0];
+  analysisFile.value = "";
+  if (!file) return;
+  try {
+    const text = await file.text();
+    setAnalysisModel(PoseLab3D.parseAny(text, file.name), file.name);
+  } catch (err) {
+    alert(`分析用データを読み込めませんでした: ${err.message}`);
+  }
+});
+window.addEventListener("resize", () => {
+  const panel = document.querySelector('.tab-panel[data-panel="results"]');
+  if (panel && !panel.hidden && analysisModel) updateAnalysis();
+});
+
 /* ----- 上部タブ (実行 / ビューア / 結果・分析) の切り替え ----- */
 
 function activateTab(name) {
@@ -1126,6 +1398,10 @@ function activateTab(name) {
   if (name === "viewer") {
     // 非表示中に初期化された canvas を再描画 (ResizeObserver がサイズ調整)
     stage3d.dirty = true;
+  }
+  if (name === "results" && analysisModel) {
+    // 表示されてからでないと canvas のサイズが 0 のため、ここで再描画
+    updateAnalysis();
   }
 }
 
@@ -1140,6 +1416,9 @@ function setupTabs() {
 const _origLoadViewerModel = loadViewerModel;
 loadViewerModel = function (model, sourceLabel) {
   _origLoadViewerModel(model, sourceLabel);
+  // 新しいデータを読み込んだら表示平滑化はリセットし、分析にも同じ raw を流す
+  if (viewerSmooth) viewerSmooth.value = "0";
+  setAnalysisModel(model, sourceLabel);
   activateTab("viewer");
 };
 
