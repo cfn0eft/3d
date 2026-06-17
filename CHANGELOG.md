@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.9 (2026-06-17)
+
+### 変更
+- **デスクトップ GUI (`poselab-gui`) のデザインを PoseLab Studio に合わせた**。
+  Studio (Web GUI) の配色トークン (近黒背景 `#0a0a0b`、パネル `#141417`/
+  `#1c1c21`、アクセント紫 `#8b93ff`/`#6e78f0`、文字 `#ededef`/`#a1a1ab`、
+  成功 `#57d399`・警告 `#f0848c`) とフォント (Noto Sans JP / Yu Gothic UI /
+  Segoe UI を優先選択、等幅は Cascadia Mono / Consolas) を Tkinter に移植。
+  選択タブ・主ボタンを紫アクセント、ラベルフレームを細罫線のカード風に統一
+  (`poselab/gui.py`)。Tkinter のため角丸/グラデーションは近似だが、Studio と
+  同じ世界観に揃えた
+
 ## 0.9.8 (2026-06-17)
 
 ### 追加
