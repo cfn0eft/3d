@@ -187,6 +187,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="処理サマリ (検出率等) を JSON で出力",
     )
     g_out.add_argument(
+        "--run-manifest", type=Path, metavar="PATH",
+        help="実行来歴 (日時・全設定・モデル・入力ハッシュ・環境・単位・"
+             "座標系) を JSON で保存する場所。未指定でも出力があれば "
+             "<出力名>.run.json に自動保存する",
+    )
+    g_out.add_argument(
+        "--no-manifest", action="store_true",
+        help="run-manifest (実行来歴) の自動保存を無効にする",
+    )
+    g_out.add_argument(
         "--smooth", type=int, default=0, metavar="N",
         help="座標を N フレームの移動平均で平滑化してから出力 (0=無効)",
     )
@@ -484,18 +494,29 @@ def _run_pose3d_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> 
     from poselab.analysis import summarize_results
 
     summary = summarize_results(results)
+
+    from poselab import provenance
+
+    manifest = provenance.build_manifest(
+        args=args,
+        backend="mmpose",
+        model=pose2d_model,
+        inputs=[str(video)],
+        source_type="VideoSource",
+        timestamp_source="frame_index / fps (3D lifter)",
+        pose3d=True,
+        extra={"lift_model": lift_model},
+    )
     if args.summary_json:
         import json
 
-        metadata = {
-            "tool": f"poselab {__version__}",
-            "backend": "mmpose",
-            "model": pose2d_model,
-            "lift_model": lift_model,
-            "input": [str(video)],
-        }
+        metadata = provenance.embed_metadata(manifest)
         with open(args.summary_json, "w", encoding="utf-8") as f:
             json.dump({**metadata, **summary}, f, ensure_ascii=False, indent=2)
+
+    _write_run_manifest(args, manifest, [
+        args.json, args.summary_json, args.csv, args.wide_csv, args.save_video,
+    ])
 
     if not args.quiet:
         print(
@@ -518,6 +539,31 @@ def _run_pose3d_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> 
                 file=sys.stderr,
             )
     return 0
+
+
+def _resolve_manifest_path(args, candidates: List[Optional[Path]]) -> Optional[Path]:
+    """run-manifest の保存先を決める (--no-manifest なら None)。"""
+    if getattr(args, "no_manifest", False):
+        return None
+    if getattr(args, "run_manifest", None):
+        return Path(args.run_manifest)
+    for cand in candidates:
+        if cand:
+            cand = Path(cand)
+            return cand.with_name(cand.stem + ".run.json")
+    return None
+
+
+def _write_run_manifest(args, manifest: dict, candidates: List[Optional[Path]]) -> None:
+    """出力があれば実行来歴サイドカーを書き出す。"""
+    path = _resolve_manifest_path(args, candidates)
+    if path is None:
+        return
+    from poselab import provenance
+
+    provenance.write_manifest(path, manifest)
+    if not args.quiet:
+        print(f"  来歴: {path}", file=sys.stderr)
 
 
 def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
@@ -569,12 +615,22 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
         )
     keypoint_names = list(backend.keypoint_names)
 
-    metadata = {
-        "tool": f"poselab {__version__}",
-        "backend": backend.name,
-        "model": model_label,
-        "input": specs,
-    }
+    from poselab import provenance
+
+    will_track = args.num_poses > 1 and not args.no_track and not is_static
+    manifest = provenance.build_manifest(
+        args=args,
+        backend=backend.name,
+        model=model_label,
+        inputs=specs,
+        fps=getattr(source, "fps", None),
+        source_type=type(source).__name__,
+        timestamp_source=(
+            "image-sequence" if is_static else type(source).__name__
+        ),
+        tracking={"enabled": will_track},
+    )
+    metadata = provenance.embed_metadata(manifest)
     if args.smooth > 1:
         metadata["smoothing_window"] = args.smooth
 
@@ -589,7 +645,9 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
         if args.json:
             exporters.append(JsonExporter(args.json, keypoint_names, metadata))
         if args.npz:
-            exporters.append(NpzExporter(args.npz, keypoint_names, args.num_poses))
+            exporters.append(
+                NpzExporter(args.npz, keypoint_names, args.num_poses, metadata)
+            )
         if args.angles_csv:
             from poselab.analysis import AngleCsvExporter
 
@@ -711,6 +769,12 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
             json.dump(
                 {**metadata, **summary}, f, ensure_ascii=False, indent=2
             )
+
+    _write_run_manifest(args, manifest, [
+        args.json, args.summary_json, args.csv, args.wide_csv, args.npz,
+        args.angles_csv, args.velocity_csv, args.distance_csv,
+        args.save_video, args.save_image,
+    ])
 
     if not args.quiet:
         print(

@@ -217,10 +217,12 @@ class NpzExporter(Exporter):
         path: "str | Path",
         keypoint_names: Sequence[str],
         max_persons: int = 1,
+        metadata: Optional[dict] = None,
     ) -> None:
         self.path = Path(path)
         self.names = list(keypoint_names)
         self.max_persons = max_persons
+        self.metadata = metadata
         self._frames: List[np.ndarray] = []
         self._world: List[np.ndarray] = []
         self._timestamps: List[float] = []
@@ -250,14 +252,19 @@ class NpzExporter(Exporter):
         self._frame_indices.append(result.frame_index)
 
     def close(self) -> None:
-        np.savez_compressed(
-            self.path,
+        arrays = dict(
             keypoints=np.stack(self._frames) if self._frames else np.empty((0,)),
             world=np.stack(self._world) if self._world else np.empty((0,)),
             timestamps_ms=np.asarray(self._timestamps, dtype=np.float64),
             frame_indices=np.asarray(self._frame_indices, dtype=np.int64),
             keypoint_names=np.asarray(self.names),
         )
+        if self.metadata is not None:
+            # メタ情報 (単位・座標系・来歴) を JSON 文字列として同梱する
+            arrays["metadata_json"] = np.asarray(
+                json.dumps(self.metadata, ensure_ascii=False)
+            )
+        np.savez_compressed(self.path, **arrays)
 
 
 def export_results(
