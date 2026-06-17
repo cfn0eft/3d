@@ -82,3 +82,17 @@ def test_npz_exporter(tmp_path, sample_results):
     assert np.isnan(data["keypoints"][3]).all()  # 検出なしフレームは NaN
     assert data["keypoints"][0, 0, 0, 0] == pytest.approx(320.0)
     assert list(data["keypoint_names"]) == LANDMARK_NAMES
+
+
+def test_npz_exporter_metadata(tmp_path, sample_results):
+    path = tmp_path / "out.npz"
+    meta = {"tool": "test", "units": {"world_x": "meter"}}
+    export_results(
+        sample_results,
+        [NpzExporter(path, LANDMARK_NAMES, max_persons=1, metadata=meta)],
+    )
+    data = np.load(path, allow_pickle=False)
+    assert "metadata_json" in data
+    loaded = json.loads(str(data["metadata_json"]))
+    assert loaded["tool"] == "test"
+    assert loaded["units"]["world_x"] == "meter"
