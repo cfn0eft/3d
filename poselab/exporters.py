@@ -35,6 +35,16 @@ CSV_FIELDS = [
 ]
 
 
+def _kp_masked(kp, threshold: float) -> bool:
+    """信頼度マスキング: visibility が閾値未満なら座標を欠損扱いにする。"""
+    return threshold > 0.0 and kp.visibility < threshold
+
+
+def _wk_masked(wk, threshold: float) -> bool:
+    """world キーポイントが無い、または低信頼度なら欠損扱い。"""
+    return wk is None or (threshold > 0.0 and wk.visibility < threshold)
+
+
 class Exporter:
     """フレーム結果を逐次受け取って書き出す基底クラス。"""
 
@@ -52,10 +62,16 @@ class Exporter:
 
 
 class CsvExporter(Exporter):
-    """ロング形式 CSV。"""
+    """ロング形式 CSV。
 
-    def __init__(self, path: "str | Path") -> None:
+    mask_visibility > 0 のとき、visibility が閾値未満のキーポイント座標は
+    空欄 (= 欠損) として書き出す。信頼度・presence 列は残すので、なぜ欠損
+    したかは追跡できる。pandas で読むと空欄は NaN になる。
+    """
+
+    def __init__(self, path: "str | Path", mask_visibility: float = 0.0) -> None:
         self.path = Path(path)
+        self.mask = mask_visibility
         self._file = open(self.path, "w", newline="", encoding="utf-8")
         self._writer = csv.writer(self._file)
         self._writer.writerow(CSV_FIELDS)
@@ -65,6 +81,8 @@ class CsvExporter(Exporter):
             world = {wk.index: wk for wk in person.world_keypoints}
             for kp in person.keypoints:
                 wk = world.get(kp.index)
+                kp_missing = _kp_masked(kp, self.mask)
+                wk_missing = _wk_masked(wk, self.mask)
                 self._writer.writerow(
                     [
                         result.frame_index,
@@ -72,16 +90,16 @@ class CsvExporter(Exporter):
                         person.person_index,
                         kp.index,
                         kp.name,
-                        f"{kp.x_px:.3f}",
-                        f"{kp.y_px:.3f}",
-                        f"{kp.x_norm:.6f}",
-                        f"{kp.y_norm:.6f}",
-                        f"{kp.z:.6f}",
+                        "" if kp_missing else f"{kp.x_px:.3f}",
+                        "" if kp_missing else f"{kp.y_px:.3f}",
+                        "" if kp_missing else f"{kp.x_norm:.6f}",
+                        "" if kp_missing else f"{kp.y_norm:.6f}",
+                        "" if kp_missing else f"{kp.z:.6f}",
                         f"{kp.visibility:.4f}",
                         f"{kp.presence:.4f}",
-                        f"{wk.x:.6f}" if wk else "",
-                        f"{wk.y:.6f}" if wk else "",
-                        f"{wk.z:.6f}" if wk else "",
+                        "" if wk_missing else f"{wk.x:.6f}",
+                        "" if wk_missing else f"{wk.y:.6f}",
+                        "" if wk_missing else f"{wk.z:.6f}",
                     ]
                 )
 
@@ -99,10 +117,14 @@ class WideCsvExporter(Exporter):
     _PER_KP = ("x", "y", "z", "visibility", "world_x", "world_y", "world_z")
 
     def __init__(
-        self, path: "str | Path", keypoint_names: Sequence[str]
+        self,
+        path: "str | Path",
+        keypoint_names: Sequence[str],
+        mask_visibility: float = 0.0,
     ) -> None:
         self.path = Path(path)
         self.names = list(keypoint_names)
+        self.mask = mask_visibility
         self._file = open(self.path, "w", newline="", encoding="utf-8")
         self._writer = csv.writer(self._file)
         header = ["frame", "timestamp_ms", "person"]
@@ -120,15 +142,17 @@ class WideCsvExporter(Exporter):
             ]
             for kp in person.keypoints:
                 wk = world.get(kp.index)
+                kp_missing = _kp_masked(kp, self.mask)
+                wk_missing = _wk_masked(wk, self.mask)
                 row.extend(
                     [
-                        f"{kp.x_px:.3f}",
-                        f"{kp.y_px:.3f}",
-                        f"{kp.z:.6f}",
+                        "" if kp_missing else f"{kp.x_px:.3f}",
+                        "" if kp_missing else f"{kp.y_px:.3f}",
+                        "" if kp_missing else f"{kp.z:.6f}",
                         f"{kp.visibility:.4f}",
-                        f"{wk.x:.6f}" if wk else "",
-                        f"{wk.y:.6f}" if wk else "",
-                        f"{wk.z:.6f}" if wk else "",
+                        "" if wk_missing else f"{wk.x:.6f}",
+                        "" if wk_missing else f"{wk.y:.6f}",
+                        "" if wk_missing else f"{wk.z:.6f}",
                     ]
                 )
             self._writer.writerow(row)
@@ -218,11 +242,13 @@ class NpzExporter(Exporter):
         keypoint_names: Sequence[str],
         max_persons: int = 1,
         metadata: Optional[dict] = None,
+        mask_visibility: float = 0.0,
     ) -> None:
         self.path = Path(path)
         self.names = list(keypoint_names)
         self.max_persons = max_persons
         self.metadata = metadata
+        self.mask = mask_visibility
         self._frames: List[np.ndarray] = []
         self._world: List[np.ndarray] = []
         self._timestamps: List[float] = []
@@ -237,15 +263,24 @@ class NpzExporter(Exporter):
             if p.person_index >= self.max_persons:
                 continue
             for kp in p.keypoints:
-                kp_arr[p.person_index, kp.index] = (
-                    kp.x_px,
-                    kp.y_px,
-                    kp.z,
-                    kp.visibility,
-                    kp.presence,
-                )
+                # 座標はマスクしても visibility/presence は残す
+                if _kp_masked(kp, self.mask):
+                    kp_arr[p.person_index, kp.index] = (
+                        np.nan, np.nan, np.nan, kp.visibility, kp.presence,
+                    )
+                else:
+                    kp_arr[p.person_index, kp.index] = (
+                        kp.x_px, kp.y_px, kp.z, kp.visibility, kp.presence,
+                    )
             for wk in p.world_keypoints:
-                w_arr[p.person_index, wk.index] = (wk.x, wk.y, wk.z, wk.visibility)
+                if _wk_masked(wk, self.mask):
+                    w_arr[p.person_index, wk.index] = (
+                        np.nan, np.nan, np.nan, wk.visibility,
+                    )
+                else:
+                    w_arr[p.person_index, wk.index] = (
+                        wk.x, wk.y, wk.z, wk.visibility,
+                    )
         self._frames.append(kp_arr)
         self._world.append(w_arr)
         self._timestamps.append(result.timestamp_ms)

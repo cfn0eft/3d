@@ -76,6 +76,42 @@ def coordinate_system(backend: Optional[str], pose3d: bool = False) -> Dict[str,
     return cs
 
 
+def score_semantics(backend: Optional[str], pose3d: bool = False) -> Dict[str, str]:
+    """visibility / presence 列の意味をバックエンドごとに記述する。
+
+    バックエンド間でスコアの意味が異なるため、横断比較の誤りを防ぐ目的で
+    出力メタに含める。
+    """
+    if pose3d:
+        return {
+            "visibility": "2D detection score propagated to the lifted 3D pose "
+            "(VideoPose3D lifting uncertainty is not modeled)",
+            "presence": "same as visibility (2D detection score)",
+        }
+    if backend == "mediapipe":
+        return {
+            "visibility": "MediaPipe landmark visibility: probability the point "
+            "is in-frame and unoccluded (0-1)",
+            "presence": "MediaPipe landmark presence: probability the point "
+            "exists in the frame (0-1)",
+        }
+    # mmpose 2D (RTMPose)
+    return {
+        "visibility": "RTMPose keypoint detection score (0-1)",
+        "presence": "mirror of visibility (RTMPose has no separate presence)",
+    }
+
+
+# 欠損値の表現規約 (形式ごと)。
+MISSING_VALUE = {
+    "csv": "empty field (parses to NaN in pandas)",
+    "npz": "NaN",
+    "json": "raw values kept; filter by visibility (viewer/interchange format)",
+    "note": "undetected person slots and, when --mask-visibility is set, "
+    "low-confidence keypoint coordinates are written as missing",
+}
+
+
 def _safe_version(module_name: str) -> Optional[str]:
     """モジュールを import してバージョン文字列を返す (失敗時 None)。"""
     try:
@@ -184,6 +220,7 @@ def build_manifest(
     timestamp_source: Optional[str] = None,
     pose3d: bool = False,
     tracking: Optional[Dict[str, Any]] = None,
+    mask_visibility: Optional[float] = None,
     extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """実行来歴 (run-manifest) を組み立てる。
@@ -203,7 +240,11 @@ def build_manifest(
         "environment": environment_info(),
         "units": dict(UNITS),
         "coordinate_system": coordinate_system(backend, pose3d=pose3d),
+        "score_semantics": score_semantics(backend, pose3d=pose3d),
+        "missing_value": dict(MISSING_VALUE),
     }
+    if mask_visibility is not None:
+        manifest["export"] = {"mask_visibility": mask_visibility}
     if inputs is not None:
         manifest["inputs"] = input_provenance(inputs)
     source: Dict[str, Any] = {}

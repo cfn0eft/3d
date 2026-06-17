@@ -98,6 +98,29 @@ def test_write_manifest_roundtrip(tmp_path):
     assert loaded["schema"] == provenance.SCHEMA
 
 
+def test_score_semantics_differ_by_backend():
+    mp = provenance.score_semantics("mediapipe")
+    mm = provenance.score_semantics("mmpose")
+    assert "MediaPipe" in mp["visibility"]
+    assert "RTMPose" in mm["visibility"]
+    # presence の意味もバックエンドで異なる
+    assert mp["presence"] != mm["presence"]
+    p3 = provenance.score_semantics("mmpose", pose3d=True)
+    assert "3D" in p3["visibility"]
+
+
+def test_manifest_includes_semantics_and_mask():
+    manifest = provenance.build_manifest(
+        backend="mediapipe", model="full", mask_visibility=0.3,
+    )
+    assert "score_semantics" in manifest
+    assert "missing_value" in manifest
+    assert manifest["export"]["mask_visibility"] == 0.3
+    # mask 未指定なら export キーは付かない
+    plain = provenance.build_manifest(backend="mediapipe", model="full")
+    assert "export" not in plain
+
+
 def test_units_cover_csv_fields():
     from poselab.exporters import CSV_FIELDS
 

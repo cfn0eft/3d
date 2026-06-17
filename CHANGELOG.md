@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.6 (2026-06-17)
+
+### 追加
+- **低信頼度キーポイントのマスキング出力 `--mask-visibility T` を追加**。
+  visibility が T 未満のキーポイント座標を欠損 (CSV は空欄、NPZ は NaN)
+  として書き出す。信頼度の低い (0,0) などの推定値を「原点で検出された」と
+  誤読するのを防ぐ (研究データの誠実性)。0=無効 (既定) で従来挙動は不変。
+  CSV ロング/ワイド・NPZ に適用し、visibility / presence 列は残すので欠損
+  理由を追跡できる
+- **スコアの意味 (score_semantics) と欠損値規約 (missing_value) を run-manifest
+  に記録**。MediaPipe の visibility/presence と mmpose (RTMPose) の検出スコアは
+  意味が異なるため、バックエンド横断比較の誤りを防ぐ目的で出力メタに明記する。
+  `--mask-visibility` の閾値も `export.mask_visibility` として記録
+
 ## 0.9.5 (2026-06-17)
 
 ### 追加
