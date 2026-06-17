@@ -384,14 +384,44 @@ class PoseLabApp:
                         variable=self.record_var).pack(anchor="w")
         self.rec_label = ttk.Label(rec, text="記録: 0 フレーム")
         self.rec_label.pack(anchor="w", pady=2)
-        row = ttk.Frame(rec)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="平滑化 (フレーム, 0=なし)").pack(side="left")
-        self.smooth_window = tk.IntVar(value=self._setting("smooth_window", 0))
-        ttk.Spinbox(row, from_=0, to=31, width=5,
-                    textvariable=self.smooth_window).pack(side="right")
         ttk.Button(rec, text="記録をクリア",
                    command=self.clear_recording).pack(fill="x", pady=(6, 0))
+
+        # 処理オプション (Studio と同等)
+        proc = ttk.LabelFrame(tab, text="処理オプション", padding=8)
+        proc.pack(fill="x", pady=(0, 8))
+        r1 = ttk.Frame(proc)
+        r1.pack(fill="x", pady=2)
+        ttk.Label(r1, text="平滑化手法").pack(side="left")
+        self.smooth_method = tk.StringVar(
+            value=self._setting("smooth_method", "移動平均"))
+        ttk.Combobox(r1, width=14, state="readonly",
+                     values=["移動平均", "メディアン", "Butterworth"],
+                     textvariable=self.smooth_method).pack(side="right")
+        r2 = ttk.Frame(proc)
+        r2.pack(fill="x", pady=2)
+        ttk.Label(r2, text="窓 (フレーム, 0=なし)").pack(side="left")
+        self.smooth_window = tk.IntVar(value=self._setting("smooth_window", 0))
+        ttk.Spinbox(r2, from_=0, to=61, width=5,
+                    textvariable=self.smooth_window).pack(side="right")
+        r3 = ttk.Frame(proc)
+        r3.pack(fill="x", pady=2)
+        ttk.Label(r3, text="カットオフ Hz (Butterworth)").pack(side="left")
+        self.smooth_cutoff = tk.DoubleVar(
+            value=self._setting("smooth_cutoff", 0.0))
+        ttk.Spinbox(r3, from_=0.0, to=30.0, increment=0.5, width=5,
+                    textvariable=self.smooth_cutoff).pack(side="right")
+        self.smooth_weighted = tk.BooleanVar(
+            value=self._setting("smooth_weighted", False))
+        ttk.Checkbutton(proc, text="visibility 加重 (移動平均)",
+                        variable=self.smooth_weighted).pack(anchor="w", pady=2)
+        r4 = ttk.Frame(proc)
+        r4.pack(fill="x", pady=2)
+        ttk.Label(r4, text="マスキング閾値 (visibility)").pack(side="left")
+        self.mask_visibility = tk.DoubleVar(
+            value=self._setting("mask_visibility", 0.0))
+        ttk.Spinbox(r4, from_=0.0, to=1.0, increment=0.05, width=5,
+                    textvariable=self.mask_visibility).pack(side="right")
 
         exp = ttk.LabelFrame(tab, text="エクスポート", padding=8)
         exp.pack(fill="x", pady=8)
@@ -404,7 +434,8 @@ class PoseLabApp:
             ("JSON...", "json"),
             ("NumPy NPZ...", "npz"),
             ("関節角度 CSV...", "angles"),
-            ("速度 CSV...", "velocity"),
+            ("速度・加速度 CSV...", "velocity"),
+            ("左右対称性 CSV...", "symmetry"),
         ):
             ttk.Button(exp, text=label,
                        command=lambda f=fmt: self.export_recorded(f)).pack(
@@ -438,6 +469,36 @@ class PoseLabApp:
             text="? = 信頼度が低い推定値\nワールド座標 (3D) ベースで計算",
             style="Dim.TLabel", justify="left",
         ).pack(anchor="w", pady=(10, 0))
+
+        gait = ttk.LabelFrame(tab, text="歩行リズム (記録データから推定)", padding=8)
+        gait.pack(fill="x", pady=(14, 0))
+        ttk.Button(gait, text="記録データから推定",
+                   command=self._estimate_gait).pack(fill="x")
+        self.gait_label = ttk.Label(
+            gait, text="(未推定)", style="Dim.TLabel", justify="left"
+        )
+        self.gait_label.pack(anchor="w", pady=(6, 0))
+
+    def _estimate_gait(self) -> None:
+        from tkinter import messagebox
+
+        if not self._recorded:
+            messagebox.showinfo("poselab", "記録されたフレームがありません")
+            return
+        from poselab.kinematics import gait_summary
+
+        summary = gait_summary(self._recorded)
+        if not summary:
+            self.gait_label.config(text="推定できませんでした (周期性が弱い)")
+            return
+        lines = []
+        for side, info in summary.items():
+            jp = "左足首" if side == "left_ankle" else "右足首"
+            lines.append(
+                f"{jp}: {info['cadence_per_min']} サイクル/分 "
+                f"(1 周期 {info['cycle_time_s']}s)"
+            )
+        self.gait_label.config(text="\n".join(lines))
 
     def _build_tab_scene(self, tab) -> None:
         """行動観察用のシーンタグ付け (時間区間にラベルを付ける)。"""
@@ -941,22 +1002,49 @@ class PoseLabApp:
         self.rec_label.config(text="記録: 0 フレーム")
         self.rec_indicator.config(text="")
 
+    _SMOOTH_METHODS = {
+        "移動平均": "moving", "メディアン": "median", "Butterworth": "butter",
+    }
+
+    def _recorded_fps(self) -> float:
+        """記録データのタイムスタンプから実効 fps を推定する。"""
+        rec = self._recorded
+        if len(rec) >= 2:
+            dur = (rec[-1].timestamp_ms - rec[0].timestamp_ms) / 1000.0
+            if dur > 0:
+                return (len(rec) - 1) / dur
+        return float(self._source_info.get("fps") or 30.0)
+
     def _recorded_for_export(self) -> List[FrameResult]:
         """記録データのコピーを返す。平滑化設定があれば適用する。"""
+        method = self._SMOOTH_METHODS.get(self.smooth_method.get(), "moving")
         window = self.smooth_window.get()
-        if window > 1:
+        cutoff = float(self.smooth_cutoff.get() or 0.0)
+        weighted = self.smooth_weighted.get()
+        active = (method == "butter" and cutoff > 0) or (
+            method in ("moving", "median") and window > 1
+        )
+        if active:
             from poselab.filters import smooth_results
 
-            return smooth_results(copy.deepcopy(self._recorded), window)
+            return smooth_results(
+                copy.deepcopy(self._recorded), window,
+                method=method, weighted=weighted,
+                cutoff=(cutoff or None), fps=self._recorded_fps(),
+            )
         return list(self._recorded)
 
+    def _mask(self) -> float:
+        return float(self.mask_visibility.get() or 0.0)
+
     def _make_exporter(self, fmt: str, path: str):
+        mask = self._mask()
         if fmt == "csv":
-            return CsvExporter(path)
+            return CsvExporter(path, mask)
         if fmt == "wide":
             from poselab.exporters import WideCsvExporter
 
-            return WideCsvExporter(path, LANDMARK_NAMES)
+            return WideCsvExporter(path, LANDMARK_NAMES, mask)
         if fmt == "json":
             return JsonExporter(
                 path, LANDMARK_NAMES, {"tool": f"poselab {__version__}"}
@@ -966,7 +1054,7 @@ class PoseLabApp:
                 (p.person_index + 1 for r in self._recorded for p in r.persons),
                 default=1,
             )
-            return NpzExporter(path, LANDMARK_NAMES, max_persons)
+            return NpzExporter(path, LANDMARK_NAMES, max_persons, None, mask)
         if fmt == "angles":
             from poselab.analysis import AngleCsvExporter
 
@@ -975,6 +1063,10 @@ class PoseLabApp:
             from poselab.analysis import VelocityCsvExporter
 
             return VelocityCsvExporter(path)
+        if fmt == "symmetry":
+            from poselab.analysis import SymmetryCsvExporter
+
+            return SymmetryCsvExporter(path)
         raise ValueError(fmt)
 
     def export_recorded(self, fmt: str) -> None:
@@ -985,7 +1077,7 @@ class PoseLabApp:
             return
         ext = {
             "csv": ".csv", "wide": ".csv", "json": ".json", "npz": ".npz",
-            "angles": ".csv", "velocity": ".csv",
+            "angles": ".csv", "velocity": ".csv", "symmetry": ".csv",
         }[fmt]
         path = filedialog.asksaveasfilename(
             defaultextension=ext, filetypes=[(fmt.upper(), f"*{ext}")]
@@ -998,7 +1090,7 @@ class PoseLabApp:
         self.status.set(f"保存しました: {path}")
 
     def export_all(self) -> None:
-        """記録データを全形式 (CSV/JSON/NPZ/角度/速度) で一括保存する。"""
+        """記録データを全形式 (CSV/JSON/NPZ/角度/速度/対称性) で一括保存する。"""
         from tkinter import filedialog, messagebox
 
         if not self._recorded:
@@ -1018,10 +1110,11 @@ class PoseLabApp:
             ("npz", str(base_path) + ".npz"),
             ("angles", str(base_path) + "_angles.csv"),
             ("velocity", str(base_path) + "_velocity.csv"),
+            ("symmetry", str(base_path) + "_symmetry.csv"),
         ]
         exporters = [self._make_exporter(fmt, path) for fmt, path in targets]
         export_results(self._recorded_for_export(), exporters)
-        self.status.set(f"6 形式で保存しました: {base_path}_*.*")
+        self.status.set(f"{len(targets)} 形式で保存しました: {base_path}_*.*")
 
     # ------------------------------------------------------------ 一括処理
     def batch_process(self) -> None:
@@ -1054,7 +1147,11 @@ class PoseLabApp:
 
         def work() -> None:
             try:
-                from poselab.analysis import AngleCsvExporter
+                from poselab.analysis import (
+                    AngleCsvExporter,
+                    SymmetryCsvExporter,
+                    VelocityCsvExporter,
+                )
                 from poselab.backends import create_backend
 
                 source = VideoSource(in_path)
@@ -1062,13 +1159,16 @@ class PoseLabApp:
                     "mediapipe", model=model, num_poses=num_poses,
                     min_detection_confidence=det_conf,
                 )
+                mask = self._mask()
                 exporters = [
-                    CsvExporter(str(base_path) + ".csv"),
+                    CsvExporter(str(base_path) + ".csv", mask),
                     JsonExporter(
                         str(base_path) + ".json", LANDMARK_NAMES,
                         {"tool": f"poselab {__version__}", "input": str(in_path)},
                     ),
                     AngleCsvExporter(str(base_path) + "_angles.csv"),
+                    VelocityCsvExporter(str(base_path) + "_velocity.csv"),
+                    SymmetryCsvExporter(str(base_path) + "_symmetry.csv"),
                 ]
                 writer = VideoWriter(
                     str(base_path) + ".mp4", fps=source.fps or 30.0
@@ -1138,6 +1238,10 @@ class PoseLabApp:
                 "trail_length": self.trail_length.get(),
                 "record": self.record_var.get(),
                 "smooth_window": self.smooth_window.get(),
+                "smooth_method": self.smooth_method.get(),
+                "smooth_cutoff": self.smooth_cutoff.get(),
+                "smooth_weighted": self.smooth_weighted.get(),
+                "mask_visibility": self.mask_visibility.get(),
             }
         )
 
