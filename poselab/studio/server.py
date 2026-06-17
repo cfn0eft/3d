@@ -404,8 +404,14 @@ def preflight(payload: dict) -> dict:
         except Exception:
             pass
 
-    if job["reencode"] and shutil.which("ffmpeg") is None:
-        warnings.append("ffmpeg が見つかりません: H.264 再エンコードはスキップされます。")
+    if job["reencode"]:
+        from poselab.pipeline import find_ffmpeg
+
+        if find_ffmpeg() is None:
+            warnings.append(
+                "ffmpeg が見つかりません: H.264 再エンコードはスキップされます "
+                "(pip install imageio-ffmpeg で自動取得できます)。"
+            )
 
     return {"ok": True, "warnings": warnings, "info": info}
 
