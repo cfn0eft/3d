@@ -203,7 +203,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_out.add_argument(
         "--smooth", type=int, default=0, metavar="N",
-        help="座標を N フレームの移動平均で平滑化してから出力 (0=無効)",
+        help="座標を N フレームの窓で平滑化してから出力 (0=無効、moving/median 用)",
+    )
+    g_out.add_argument(
+        "--smooth-method", choices=("moving", "median", "butter"), default="moving",
+        help="平滑化手法: moving=中央移動平均 (既定), median=移動メディアン "
+             "(外れ値に頑健), butter=ゼロ位相 Butterworth (生体力学標準, "
+             "--smooth-cutoff が必要)",
+    )
+    g_out.add_argument(
+        "--smooth-weighted", action="store_true",
+        help="moving 法で visibility を重みにした加重平均にする",
+    )
+    g_out.add_argument(
+        "--smooth-cutoff", type=float, default=None, metavar="HZ",
+        help="butter 法のカットオフ周波数 [Hz] (0 < HZ < fps/2)",
     )
     g_out.add_argument(
         "--mask-visibility", type=float, default=0.0, metavar="T",
@@ -450,8 +464,8 @@ def _run_pose3d_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> 
         if value:
             parser.error(f"{name} は --pose3d では未対応です")
     notes = []
-    if args.smooth and args.smooth > 1:
-        notes.append("--smooth は無視されます")
+    if (args.smooth and args.smooth > 1) or args.smooth_method == "butter":
+        notes.append("平滑化 (--smooth / --smooth-method) は無視されます")
     if args.max_frames:
         notes.append("--max-frames は無視されます (全フレームを処理)")
     if args.angles_csv:
@@ -646,8 +660,14 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
         mask_visibility=args.mask_visibility,
     )
     metadata = provenance.embed_metadata(manifest)
-    if args.smooth > 1:
-        metadata["smoothing_window"] = args.smooth
+    smoothing_on = args.smooth_method == "butter" or args.smooth > 1
+    if smoothing_on:
+        metadata["smoothing"] = {
+            "method": args.smooth_method,
+            "window": args.smooth,
+            "weighted": args.smooth_weighted,
+            "cutoff_hz": args.smooth_cutoff,
+        }
 
     def build_exporters() -> List[Exporter]:
         exporters: List[Exporter] = []
@@ -692,8 +712,11 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
             exporters.append(DistanceCsvExporter(args.distance_csv, pairs))
         return exporters
 
+    if args.smooth_method == "butter" and not args.smooth_cutoff:
+        parser.error("--smooth-method butter には --smooth-cutoff [Hz] が必要です")
+
     # 平滑化は全フレームを見てから行うため、有効時は後段でまとめて出力する
-    streaming = args.smooth <= 1
+    streaming = not smoothing_on
     exporters = build_exporters() if streaming else []
 
     video_writer = None
@@ -754,7 +777,13 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
         from poselab.exporters import export_results
         from poselab.filters import smooth_results
 
-        results = smooth_results(results, args.smooth)
+        results = smooth_results(
+            results, args.smooth,
+            method=args.smooth_method,
+            weighted=args.smooth_weighted,
+            cutoff=args.smooth_cutoff,
+            fps=getattr(source, "fps", None),
+        )
         export_results(results, build_exporters())
 
     if args.save_video and args.h264:
