@@ -172,7 +172,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_out.add_argument(
         "--velocity-csv", type=Path,
-        help="キーポイント速度 (px/s, m/s) を CSV で出力",
+        help="キーポイントの速度・加速度・ジャーク (px/s, m/s, m/s^2, m/s^3) "
+             "を CSV で出力",
+    )
+    g_out.add_argument(
+        "--symmetry-csv", type=Path,
+        help="左右の関節角度の対称性 (Symmetry Index) を CSV で出力",
     )
     g_out.add_argument(
         "--distance", action="append", metavar="A:B",
@@ -671,6 +676,10 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
             from poselab.analysis import VelocityCsvExporter
 
             exporters.append(VelocityCsvExporter(args.velocity_csv))
+        if args.symmetry_csv:
+            from poselab.analysis import SymmetryCsvExporter
+
+            exporters.append(SymmetryCsvExporter(args.symmetry_csv))
         if args.distance:
             from poselab.features import DistanceCsvExporter, parse_pair
 
@@ -780,6 +789,11 @@ def _run_job(parser: argparse.ArgumentParser, args, specs: List[str]) -> int:
     if args.summary_json:
         import json
 
+        from poselab.kinematics import gait_summary
+
+        gait = gait_summary(results)
+        if gait:
+            summary["gait"] = gait
         with open(args.summary_json, "w", encoding="utf-8") as f:
             json.dump(
                 {**metadata, **summary}, f, ensure_ascii=False, indent=2
