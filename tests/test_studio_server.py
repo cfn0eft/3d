@@ -200,6 +200,66 @@ def test_build_command_mediapipe(fake_env):
     assert "--model full" in " ".join(build_command(job1))
 
 
+def test_build_command_analysis_mediapipe(fake_env):
+    job = normalize_job({
+        "input": str(fake_env["video"]),
+        "output_root": str(fake_env["tmp"] / "out"),
+        "backend": "mediapipe",
+        "angles": True,
+        "velocity": True,
+        "symmetry": True,
+        "smooth_method": "butter",
+        "smooth_cutoff": 6.0,
+        "mask_visibility": 0.3,
+    })
+    cmd = build_command(job)
+    text = " ".join(cmd)
+    assert "--angles-csv" in cmd
+    assert "--velocity-csv" in cmd
+    assert "--symmetry-csv" in cmd
+    assert "--smooth-method butter" in text
+    assert "--smooth-cutoff 6.0" in text
+    assert "--mask-visibility 0.3" in text
+
+
+def test_build_command_smoothing_methods(fake_env):
+    base = {"input": str(fake_env["video"]), "backend": "mediapipe"}
+    moving = build_command(normalize_job({
+        **base, "smooth_method": "moving", "smooth_window": 5,
+        "smooth_weighted": True,
+    }))
+    assert "--smooth" in moving and "5" in moving
+    assert "--smooth-weighted" in moving
+    median = " ".join(build_command(normalize_job({
+        **base, "smooth_method": "median", "smooth_window": 7,
+    })))
+    assert "--smooth-method median" in median
+    # 窓 0 / 手法 moving では平滑化フラグなし
+    none = build_command(normalize_job({**base, "smooth_window": 0}))
+    assert "--smooth" not in none
+
+
+def test_build_command_analysis_gated_for_mmpose(fake_env):
+    # MMPose (pose3d) は角度/速度/対称性 CSV と平滑化を付けない
+    job = normalize_job({
+        "input": str(fake_env["video"]),
+        "backend": "mmpose",
+        "angles": True,
+        "velocity": True,
+        "symmetry": True,
+        "smooth_method": "median",
+        "smooth_window": 5,
+        "mask_visibility": 0.4,
+    })
+    cmd = build_command(job)
+    assert "--velocity-csv" not in cmd  # pose3d は CLI が拒否する
+    assert "--angles-csv" not in cmd
+    assert "--symmetry-csv" not in cmd
+    assert "--smooth-method" not in cmd
+    # マスキングは両バックエンド対応
+    assert "--mask-visibility 0.4" in " ".join(cmd)
+
+
 def test_job_output_paths_layout(tmp_path):
     job = normalize_job({
         "input": str(tmp_path / "dance.mp4"),

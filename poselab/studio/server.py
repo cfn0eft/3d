@@ -94,6 +94,20 @@ def normalize_backend(value: "str | None") -> str:
     return backend if backend in ("mmpose", "mediapipe") else "mmpose"
 
 
+def _as_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def normalize_job(payload: dict) -> dict:
     """GUI の payload を 1 ジョブの正規形に変換する。"""
     input_path = str(payload.get("input") or "").strip()
@@ -114,6 +128,16 @@ def normalize_job(payload: dict) -> dict:
         "progress": bool(payload.get("progress", True)),
         "center_root": bool(payload.get("center_root", False)),
         "normalize_scale": bool(payload.get("normalize_scale", False)),
+        # 分析出力 (角度 / 速度・加速度 / 左右対称性。MediaPipe で有効)
+        "angles": bool(payload.get("angles", False)),
+        "velocity": bool(payload.get("velocity", False)),
+        "symmetry": bool(payload.get("symmetry", False)),
+        # 平滑化 (MediaPipe で有効) と低信頼度マスキング (両対応)
+        "smooth_method": str(payload.get("smooth_method") or "moving"),
+        "smooth_window": _as_int(payload.get("smooth_window"), 0),
+        "smooth_cutoff": _as_float(payload.get("smooth_cutoff"), 0.0),
+        "smooth_weighted": bool(payload.get("smooth_weighted", False)),
+        "mask_visibility": _as_float(payload.get("mask_visibility"), 0.0),
         # MediaPipe バックエンド用 (モデルサイズ / 最大検出人数)
         "model": str(payload.get("model") or "full"),
         "num_poses": num_poses,
@@ -140,17 +164,62 @@ def job_output_paths(job: dict) -> Dict[str, Path]:
         paths["wide_csv"] = out_dir / f"{stem}_wide.csv"
     if csv_format in ("both", "long"):
         paths["long_csv"] = out_dir / f"{stem}_long.csv"
+    # 分析 CSV は MediaPipe バックエンドでのみ生成される (3D リフタは非対応)
+    if job.get("backend") == "mediapipe":
+        if job.get("angles"):
+            paths["angles_csv"] = out_dir / f"{stem}_angles.csv"
+        if job.get("velocity"):
+            paths["velocity_csv"] = out_dir / f"{stem}_velocity.csv"
+        if job.get("symmetry"):
+            paths["symmetry_csv"] = out_dir / f"{stem}_symmetry.csv"
     return paths
 
 
+def _mask_flags(job: dict) -> List[str]:
+    """低信頼度マスキングのフラグ (両バックエンド対応)。"""
+    mv = _as_float(job.get("mask_visibility"), 0.0)
+    return ["--mask-visibility", str(mv)] if mv > 0 else []
+
+
+def _smoothing_flags(job: dict) -> List[str]:
+    """平滑化フラグ (MediaPipe で有効)。手法に応じて引数を選ぶ。"""
+    method = job.get("smooth_method") or "moving"
+    window = _as_int(job.get("smooth_window"), 0)
+    cutoff = _as_float(job.get("smooth_cutoff"), 0.0)
+    if method == "butter" and cutoff > 0:
+        return ["--smooth-method", "butter", "--smooth-cutoff", str(cutoff)]
+    if method == "median" and window > 1:
+        return ["--smooth", str(window), "--smooth-method", "median"]
+    if window > 1:  # moving (既定)
+        flags = ["--smooth", str(window)]
+        if job.get("smooth_weighted"):
+            flags.append("--smooth-weighted")
+        return flags
+    return []
+
+
+def _analysis_flags(job: dict, paths: Dict[str, Path]) -> List[str]:
+    """分析 CSV (角度 / 速度 / 対称性) の出力フラグ。"""
+    flags: List[str] = []
+    for key, flag in (
+        ("angles_csv", "--angles-csv"),
+        ("velocity_csv", "--velocity-csv"),
+        ("symmetry_csv", "--symmetry-csv"),
+    ):
+        if key in paths:
+            flags.extend([flag, str(paths[key])])
+    return flags
+
+
 def _append_output_flags(cmd: List[str], job: dict, paths: Dict[str, Path]) -> None:
-    """両バックエンド共通の出力フラグ (H.264 / CSV / quiet) を付ける。"""
+    """両バックエンド共通の出力フラグ (H.264 / CSV / マスキング / quiet) を付ける。"""
     if job.get("reencode"):
         cmd.append("--h264")
     if "wide_csv" in paths:
         cmd.extend(["--wide-csv", str(paths["wide_csv"])])
     if "long_csv" in paths:
         cmd.extend(["--csv", str(paths["long_csv"])])
+    cmd.extend(_mask_flags(job))
     if not job.get("progress", True):
         cmd.append("--quiet")
 
@@ -174,6 +243,9 @@ def build_command(job: dict) -> List[str]:
         if num_poses > 1:
             cmd.extend(["--num-poses", str(num_poses)])
         _append_output_flags(cmd, job, paths)
+        # 分析 CSV と平滑化は MediaPipe バックエンドでのみ対応
+        cmd.extend(_analysis_flags(job, paths))
+        cmd.extend(_smoothing_flags(job))
         return cmd
 
     # MMPose: RTMDet + RTMPose 2D → VideoPose3D 3D リフティング。
@@ -813,6 +885,9 @@ class JobManager:
             ("json", "json"),
             ("wide_csv", "csv"),
             ("long_csv", "csv"),
+            ("angles_csv", "csv"),
+            ("velocity_csv", "csv"),
+            ("symmetry_csv", "csv"),
             ("summary", "summary"),
             ("video", "video"),
         )
