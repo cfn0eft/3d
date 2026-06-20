@@ -1,9 +1,8 @@
 # poselab — 研究用ヒト骨格推定ツールキット
 
 画像・動画・カメラ入力からヒトの骨格 (33 キーポイント) を推定し、
-座標データを CSV / JSON / NumPy 形式でエクスポートできるツールです。
-GUI と CLI の両方から使用でき、結果はブラウザ 3D ビューア
-([poselab-viewer](#ブラウザ-3d-ビューア-poselab-viewer)) で再生できます。
+座標データを CSV / JSON / NumPy 形式でエクスポートできる研究用ツールキットです。
+**推定 → 分析 → 可視化** を、GUI でも CLI でも一通り完結できます。
 
 ![GUI スクリーンショット](docs/images/gui_screenshot.png)
 
@@ -16,8 +15,59 @@ GUI と CLI の両方から使用でき、結果はブラウザ 3D ビューア
   (RTMDet + RTMPose の高精度 2D、VideoPose3D 系の 3D リフティング) も
   選択可能 ([MMPose バックエンド](#mmpose-バックエンド-高精度-2d--3d-リフティング) 参照)
 - 本リポジトリのコードはすべて独自実装 (MIT ライセンス)
-- 2D ピクセル座標・正規化座標・3D ワールド座標 (メートル単位) ・信頼度を出力
-- 複数人検出に対応 (`--num-poses`)
+- 2D ピクセル座標・正規化座標・3D ワールド座標 (メートル単位)・信頼度を出力
+- 複数人検出 + 人物 ID トラッキングに対応 (`--num-poses`)
+- 関節角度・速度/加速度/ジャーク・左右対称性・歩行リズムなどの分析指標を出力
+
+## 目次
+
+- [このツールキットでできること](#このツールキットでできること)
+- [クイックスタート](#クイックスタート)
+- [インストール](#インストール)
+- [使い方 (CLI)](#使い方-cli)
+- [使い方 (GUI)](#使い方-gui)
+- [出力フォーマット](#出力フォーマット)
+- [分析方法](#分析方法)
+- [ブラウザ 3D ビューア (poselab-viewer)](#ブラウザ-3d-ビューア-poselab-viewer)
+- [MMPose バックエンド (高精度 2D + 3D リフティング)](#mmpose-バックエンド-高精度-2d--3d-リフティング)
+- [PoseLab Studio (Web GUI)](#poselab-studio-web-gui)
+- [Python API](#python-api)
+- [開発・テスト](#開発テスト)
+- [ライセンス・研究利用上の注意](#ライセンスについて)
+
+## このツールキットでできること
+
+poselab は 4 つの使い方を 1 つのリポジトリにまとめたものです。用途に応じて選んでください。
+
+| ツール | コマンド | 用途 |
+| --- | --- | --- |
+| **CLI** | `poselab` | 画像・動画・カメラを一括処理して座標/分析データを出力 |
+| **デスクトップ GUI** | `poselab-gui` | ライブプレビューしながら推定・記録・一括処理 |
+| **3D ビューア** | `poselab-viewer` | 推定結果をブラウザで 3D 再生・切り出し・形式変換 |
+| **PoseLab Studio** | `poselab-studio` | 動画をキュー処理する Web GUI (mmpose 2D + 3D リフティング) |
+
+## クイックスタート
+
+```bash
+# 1. インストール (グラフ機能も使う場合は [plot] を付ける)
+pip install -e ".[plot]"
+
+# 2. 推定: 動画を一括処理して <動画名>_poselab/ に全形式を出力
+#    (座標 CSV/JSON・関節角度・速度・サマリ・H.264 注釈動画)
+poselab --input walk.mp4 --auto-output
+
+# 3. 分析: 出力 CSV からグラフ画像を生成 (コーディング不要)
+poselab-plot walk_poselab/walk_long.csv -k right_wrist,left_wrist
+poselab-plot walk_poselab/walk_angles.csv
+
+# 4. 可視化: 結果をブラウザで 3D 再生 (ドラッグで回転)
+poselab-viewer walk_poselab/
+```
+
+GUI から始めたい場合は `poselab-gui` を起動し、動画を開いて「座標を記録する」を
+有効にするだけで同じデータが得られます。手元に結果ファイルが無くても、
+ビューアの「デモ」ボタンや GitHub Pages 版 (<https://cfn0eft.github.io/3d/>)
+で動作を確認できます。
 
 ## インストール
 
@@ -26,18 +76,35 @@ Python 3.9 以上が必要です。
 ```bash
 git clone <this-repo>
 cd 3d
-pip install -e .
+pip install -e .                # 基本機能
+pip install -e ".[plot]"        # グラフ生成 (poselab-plot) も使う場合
 ```
 
 (PyPI 公開後は `pip install poselab-toolkit` でもインストールできる予定です。
 配布名は poselab-toolkit ですが、import 名・コマンド名は `poselab` です)
 
-GUI を使う場合は tkinter も必要です (多くの環境では同梱。Ubuntu では
-`sudo apt install python3-tk`)。
+インストールされる主なコマンド: `poselab` (CLI) / `poselab-gui` (GUI) /
+`poselab-plot` (グラフ) / `poselab-viewer` (3D ビューア) / `poselab-studio` (Web GUI)。
 
-初回実行時に推定モデル (約 5–30 MB、Apache-2.0) が
-`~/.cache/poselab/` に自動ダウンロードされます。
-保存先は環境変数 `POSELAB_CACHE_DIR` で変更できます。
+初回実行時に推定モデル (約 5–30 MB、Apache-2.0) が `~/.cache/poselab/` に
+自動ダウンロードされます。保存先は環境変数 `POSELAB_CACHE_DIR` で変更できます。
+オフライン環境へ持ち込む場合などは、事前にまとめて取得できます:
+
+```bash
+poselab --prepare-models          # MediaPipe モデルを事前ダウンロード
+```
+
+### GUI を使う場合 (tkinter)
+
+`poselab-gui` には tkinter が必要です (多くの環境では Python に同梱)。
+
+- Ubuntu/Debian: `sudo apt install python3-tk`
+- Anaconda 環境で GUI が起動しない場合: `conda install tk`
+
+### MMPose バックエンド (オプション)
+
+高精度 2D / 3D リフティングを使う場合のみ追加インストールが必要です。
+詳細は [MMPose バックエンド](#mmpose-バックエンド-高精度-2d--3d-リフティング) を参照してください。
 
 ### カメラが開けないとき
 
@@ -61,9 +128,10 @@ Windows (64bit Python 3.9–3.12) でも動作します。
   `imdecode` / `imencode` を使用)
 - **動画ファイル**のパスは OpenCV のバックエンド依存のため、
   日本語を含むパスで開けない場合は英数字のみのパスをお試しください
-- Anaconda 環境で GUI が起動しない場合は `conda install tk`
+- H.264 (ブラウザ再生可能な mp4) 出力に必要な ffmpeg は依存ライブラリ
+  `imageio-ffmpeg` 経由で自動的に同梱されるため、追加インストールは不要です
 
-## CLI の使い方
+## 使い方 (CLI)
 
 ```bash
 # 動画を処理して座標 CSV と骨格描画済み動画を出力
@@ -89,16 +157,6 @@ poselab --input camera:0 --show --csv live.csv
 poselab --input dance.mp4 --model heavy --num-poses 3 --npz dance.npz \
         --csv dance.csv --save-video dance_tracked.mp4
 
-# 関節角度 (肘・肩・股・膝・足首) の時系列 CSV + 5 フレーム移動平均で平滑化
-poselab --input squat.mp4 --angles-csv angles.csv --csv coords.csv --smooth 5
-
-# キーポイント速度 (px/s, m/s) と処理サマリ (検出率等) も出力
-poselab --input run.mp4 --velocity-csv vel.csv --summary-json summary.json
-
-# 手首・足首の軌跡 (直近 30 フレーム) を動画上にプロットして書き出し
-poselab --input swing.mp4 --save-video swing_trail.mp4 \
-        --trail 30 --trail-keypoints left_wrist,right_wrist,left_ankle,right_ankle
-
 # キーポイント名一覧 / 環境診断
 poselab --list-keypoints
 poselab --info
@@ -110,39 +168,68 @@ poselab --info
 [##############----------]  60.0%  18/30  15.9 fps  残り 0:01
 ```
 
-主なオプション:
+分析データ (関節角度・速度・対称性・距離・サマリ) の出力は
+[分析方法](#分析方法) を参照してください。
+
+### 主なオプション
+
+**入力・モデル**
 
 | オプション | 説明 |
 | --- | --- |
-| `--input` | 画像/動画パス、または `camera:0` 形式のカメラ指定 |
-| `--model {lite,full,heavy}` | モデルサイズ (lite=高速 / heavy=高精度) |
+| `--input` / `-i` | 画像/動画パス (画像は複数可)、または `camera:0` 形式のカメラ指定 |
+| `--backend {mediapipe,mmpose}` | 推定バックエンド (mmpose はオプション依存) |
+| `--model {lite,full,heavy}` | MediaPipe のモデルサイズ (lite=高速 / heavy=高精度) |
 | `--num-poses N` | 最大検出人数 (2 以上で ID トラッキングが自動有効) |
 | `--no-track` | 人物 ID トラッキングを無効化 |
-| `--csv` / `--wide-csv` / `--json` / `--npz` | 座標データの出力先 (ロング / ワイド形式) |
+| `--min-detection-confidence` / `--min-tracking-confidence` | 検出・トラッキングの信頼度しきい値 |
+| `--prepare-models` | 推定モデルの重みを事前ダウンロードして終了 |
+
+**座標データの出力**
+
+| オプション | 説明 |
+| --- | --- |
+| `--csv` / `--wide-csv` | 座標 CSV (ロング / ワイド形式) |
+| `--json` / `--npz` | 座標 JSON / NumPy .npz |
 | `--auto-output` | `<入力名>_poselab/` へ一括出力 (複数入力可、`--outputs` で形式選択) |
-| `--h264` | 注釈動画を H.264 に再エンコード (ブラウザ再生可、要 ffmpeg) |
-| `--angles-csv` | 関節角度 (10 関節) の時系列 CSV |
-| `--velocity-csv` | キーポイント速度 (px/s と m/s) の時系列 CSV |
-| `--distance A:B --distance-csv` | 2 点間距離の時系列 CSV (複数ペア可) |
-| `--summary-json` | 処理サマリ (検出率・平均人数等) の JSON |
-| `--smooth N` | N フレーム移動平均による座標の平滑化 |
-| `--info` | 環境診断 (バージョン・モデルキャッシュ状況) |
 | `--save-video` / `--save-image` | 骨格描画済みメディアの出力先 |
-| `--show` | プレビューウィンドウ表示 |
+| `--h264` | 注釈動画を H.264 に再エンコード (ブラウザ再生可) |
+
+**分析データの出力** ([分析方法](#分析方法) 参照)
+
+| オプション | 説明 |
+| --- | --- |
+| `--angles-csv` | 関節角度 (10 関節) + 角速度の時系列 CSV |
+| `--velocity-csv` | 速度・加速度・ジャーク (px/s, m/s, m/s², m/s³) の時系列 CSV |
+| `--symmetry-csv` | 左右の関節角度の対称性 (Symmetry Index) の時系列 CSV |
+| `--distance A:B --distance-csv` | 2 点間距離の時系列 CSV (複数ペア可) |
+| `--summary-json` | 処理サマリ (検出率・歩行リズム等) の JSON |
+| `--smooth N` / `--smooth-method` | N フレーム窓で平滑化 (moving/median/butter) |
+| `--smooth-weighted` / `--smooth-cutoff HZ` | visibility 加重 / Butterworth カットオフ |
+| `--mask-visibility T` | visibility が T 未満のキーポイントを欠損扱い |
+| `--run-manifest` / `--no-manifest` | 実行来歴 (再現性メタ情報) の保存先 / 無効化 |
+
+**表示・その他**
+
+| オプション | 説明 |
+| --- | --- |
+| `--show` | プレビューウィンドウ表示 (q で終了) |
 | `--draw-labels` | キーポイント名も描画 |
-| `--trail N` | キーポイント軌跡を直近 N フレーム分プロット |
-| `--trail-keypoints` | 軌跡対象 (カンマ区切り、`all` で全 33 点) |
+| `--trail N` / `--trail-keypoints` | キーポイント軌跡を直近 N フレーム分プロット (`all` で全 33 点) |
 | `--camera-mirror` | カメラ映像を左右反転 (鏡像) で処理 |
 | `--max-frames N` | 処理フレーム数の上限 |
+| `--info` | 環境診断 (バージョン・モデルキャッシュ状況) |
 
-## GUI の使い方
+全オプションは `poselab --help` で確認できます。
+
+## 使い方 (GUI)
 
 ```bash
 poselab-gui
 ```
 
 - **ダークテーマ UI**: ツールバー + タブ構成 (設定 / 記録・保存 / 一括処理 /
-  関節角度) で整理されたパネル、記録中インジケータ付きステータスバー
+  関節角度 / シーンタグ) で整理されたパネル、記録中インジケータ付きステータスバー
 - **入力**: 画像・動画ファイルを開く、またはカメラ番号を指定して開始
   (ミラー表示の切り替え可)。ショートカット: Ctrl+I (画像) / Ctrl+O (動画)
 - **ライブプレビュー**: 骨格オーバーレイ・FPS・再生位置 (% と時刻、
@@ -155,8 +242,9 @@ poselab-gui
   (信頼度の低い値には ? マーク)
 - **記録**: 「座標を記録する」を有効にすると推定結果が蓄積され、
   CSV / JSON / NPZ / 関節角度 / 速度にエクスポートできます。
-  Ctrl+S で全 5 形式を一括保存。エクスポート時の移動平均平滑化にも対応
-- **一括処理**: 動画ファイルを選ぶと、座標 (CSV + JSON) ・関節角度 CSV ・
+  Ctrl+S で全 5 形式を一括保存。エクスポート時の平滑化 (移動平均 / メディアン /
+  ゼロ位相 Butterworth)・visibility 加重・低信頼度マスキングにも対応
+- **一括処理**: 動画ファイルを選ぶと、座標 (CSV + JSON)・関節角度 CSV・
   骨格描画済み動画 (MP4) を進捗 % と残り時間の表示付きで一括生成します
 - **状況表示**: 処理終了時に検出率 (%) のサマリを表示
 - **設定の保存**: モデル・しきい値などの設定は終了時に自動保存され、
@@ -194,25 +282,6 @@ wrist = df[df.keypoint_name == "right_wrist"]
 キーポイントごとに `{名前}_x / _y / _z / _visibility / _world_x / _world_y /
 _world_z` の列を持つ形式です。Excel や MATLAB でそのまま扱えます。
 
-### 関節角度 CSV (`--angles-csv`)
-
-肘・肩・股関節・膝・足首 (左右計 10 関節) について、3 点のなす角を
-度単位で出力します。ワールド座標 (3D) がある場合はそれを優先し
-(`coordinates=world`)、なければピクセル座標 (2D) で計算します。
-列: `frame, timestamp_ms, person, angle_name, angle_deg, min_visibility, coordinates`
-
-### 速度 CSV (`--velocity-csv`)
-
-前フレームとの差分から各キーポイントの速度を計算します。
-ピクセル座標系の `vx_px_per_s` / `vy_px_per_s` / `speed_px_per_s` と、
-ワールド座標系の `speed_m_per_s` (m/s) を出力します。
-検出が途切れた直後のフレームは行を生成しません。
-
-### サマリ JSON (`--summary-json`)
-
-`total_frames` / `detected_frames` / `detection_rate` / `max_persons` /
-`mean_persons` / `mean_visibility` / `duration_s` などの品質指標です。
-
 ### JSON
 
 `metadata` (ツール情報・キーポイント名一覧) と `frames` (フレームごとの
@@ -231,7 +300,106 @@ data = np.load("dance.npz")
 right_wrist_xy = data["keypoints"][:, 0, 16, :2]  # 16 = right_wrist
 ```
 
-## グラフ生成 (poselab-plot)
+## 分析方法
+
+推定した座標から、研究でよく使う運動指標を **追加コーディングなし** で
+得られます。分析の入口は 5 つあります。
+
+| 方法 | 何ができるか |
+| --- | --- |
+| **1. CLI で指標 CSV/JSON を直接出力** | 関節角度・速度・対称性・距離・サマリを推定と同時に書き出す |
+| **2. ノイズ対策 (平滑化・マスキング)** | 推定ノイズを抑えてから分析データを出力する |
+| **3. グラフ生成 (`poselab-plot`)** | 出力 CSV からグラフ画像を 1 コマンドで生成 |
+| **4. 3D ビューアの分析機能** | ブラウザ上で平滑化・切り出し・形式変換 |
+| **5. PoseLab Studio の対話型分析** | 結果を読み込み、指標を変えながら即時にグラフ + 要約統計 |
+
+### 1. CLI で分析指標を直接出力する
+
+#### 関節角度 (`--angles-csv`)
+
+肘・肩・股関節・膝・足首 (左右計 10 関節) について、3 点のなす角を
+度単位で出力します。前フレームとの差分から **角速度 (度/秒)** も計算します。
+ワールド座標 (3D) がある場合はそれを優先し (`coordinates=world`)、
+なければピクセル座標 (2D) で計算します。
+
+```bash
+poselab --input squat.mp4 --angles-csv angles.csv --csv coords.csv
+```
+
+列: `frame, timestamp_ms, person, angle_name, angle_deg,
+angular_velocity_deg_per_s, min_visibility, coordinates`
+
+#### 速度・加速度・ジャーク (`--velocity-csv`)
+
+各キーポイントについて、フレーム間の有限差分から速度 (1 階)・加速度 (2 階)・
+ジャーク (3 階) を計算します。ピクセル座標系と、ワールド座標系 (メートル) の
+両方を出力します。高次微分はノイズに敏感なので `--smooth` との併用を推奨します。
+
+```bash
+poselab --input run.mp4 --velocity-csv vel.csv --smooth 5
+```
+
+列: `... vx_px_per_s, vy_px_per_s, speed_px_per_s, speed_m_per_s,
+accel_px_per_s2, accel_m_per_s2, jerk_m_per_s3` (高次の量は最初の数フレームが空欄)
+
+#### 左右対称性 (`--symmetry-csv`)
+
+左右で対応する関節 (肘・肩・股・膝・足首) の角度から
+**Symmetry Index** = `|L - R| / ((|L| + |R|) / 2)` を計算します。
+0 が左右対称、値が大きいほど非対称で、リハビリ・左右差評価に向きます。
+
+```bash
+poselab --input gait.mp4 --symmetry-csv symmetry.csv
+```
+
+列: `frame, timestamp_ms, person, joint, left_deg, right_deg, symmetry_index`
+
+#### 2 点間距離 (`--distance`)
+
+任意の 2 キーポイント間の距離 (ピクセル / メートル) を時系列で出力します。
+ペアは複数指定でき、`--distance-csv` で出力先を指定します。
+
+```bash
+poselab --input reach.mp4 --distance right_wrist:nose \
+        --distance right_wrist:left_wrist --distance-csv dist.csv
+```
+
+#### 処理サマリ + 歩行リズム (`--summary-json`)
+
+`total_frames` / `detected_frames` / `detection_rate` / `max_persons` /
+`mean_persons` / `mean_visibility` / `duration_s` などの品質指標に加え、
+足首の上下動の自己相関から推定した **歩行リズム** (cadence = 毎分サイクル数、
+1 周期時間) を `gait` として出力します。複数人検出時に ID 入れ替わりの
+リスクが検出された区間は `id_warnings` として記録されます。
+
+```bash
+poselab --input walk.mp4 --summary-json summary.json
+```
+
+### 2. ノイズ対策 (平滑化・マスキング)
+
+推定値にはノイズが含まれるため、分析の前段で平滑化や低信頼度マスクを
+かけられます。これらは座標・角度・速度などすべての出力に反映されます。
+
+| オプション | 説明 |
+| --- | --- |
+| `--smooth N` | N フレームの窓で平滑化 (0=無効) |
+| `--smooth-method moving` | 中央移動平均 (既定) |
+| `--smooth-method median` | 移動メディアン (スパイク・外れ値に強い) |
+| `--smooth-method butter --smooth-cutoff HZ` | ゼロ位相 Butterworth (カットオフ周波数 Hz) |
+| `--smooth-weighted` | moving 法で visibility を重みにした加重平均 |
+| `--mask-visibility T` | visibility が T 未満のキーポイントを欠損 (CSV は空欄) にする |
+
+```bash
+# 移動メディアンで外れ値を除去してから角度・速度を出力
+poselab --input run.mp4 --smooth 7 --smooth-method median \
+        --angles-csv angles.csv --velocity-csv vel.csv
+
+# 低信頼度のキーポイントを除外
+poselab --input occluded.mp4 --mask-visibility 0.5 --csv coords.csv
+```
+
+### 3. グラフ生成 (poselab-plot)
 
 出力した CSV から、コーディングなしでグラフ画像を生成できます
 (`pip install "poselab-toolkit[plot]"` または `pip install matplotlib`)。
@@ -252,6 +420,26 @@ poselab-plot dist.csv
 poselab-plot coords.csv --kind pose3d --frame 75 --show
 ```
 
+### 4. 3D ビューアの分析機能
+
+[poselab-viewer](#ブラウザ-3d-ビューア-poselab-viewer) では、再生中に
+ライブ平滑化 (移動平均の窓を変えると即再計算) を試したり、人物・関節・
+フレーム範囲を選んで CSV / JSON に切り出したりできます。
+
+### 5. PoseLab Studio の対話型分析
+
+[PoseLab Studio](#poselab-studio-web-gui) の「結果・分析」タブでは、
+読み込んだ結果から **関節角度・速度・左右対称性 (SI)** をブラウザ上で計算し、
+グラフと要約統計 (平均 / 最小 / 最大 / 範囲 / 標準偏差) を表示します。
+指標・対象関節・人物・平滑化窓・フレーム範囲を変えると即時に再計算されます。
+
+### 再現性 (run-manifest)
+
+研究で結果を再現・引用できるよう、各実行のメタ情報 (実行日時・全 CLI 引数・
+バックエンド/モデル名・入力ファイルの SHA-256・実行環境のバージョン・
+出力の単位と座標系の定義) を **run-manifest** (JSON) として自動保存します。
+保存先は `--run-manifest PATH` で指定でき、`--no-manifest` で無効化できます。
+
 ## ブラウザ 3D ビューア (poselab-viewer)
 
 推定結果をブラウザ上でインタラクティブに 3D 再生できるビューアです。
@@ -263,8 +451,8 @@ poselab-plot coords.csv --kind pose3d --frame 75 --show
 poselab-viewer
 
 # 結果ファイルを渡して起動 (フォルダ指定で中の JSON / CSV 全部)
-poselab-viewer run_poselab/run_coords.json
-poselab-viewer run_poselab/
+poselab-viewer walk_poselab/walk.json
+poselab-viewer walk_poselab/
 
 # CSS/JS を埋め込んだ自己完結 HTML を書き出す (共有・静的ホスティング用)
 poselab-viewer --export-html viewer.html
@@ -274,7 +462,7 @@ poselab-viewer --export-html viewer.html
 
 | 形式 | 例 |
 | --- | --- |
-| poselab JSON | `--json` / `--auto-output` の `*_coords.json` |
+| poselab JSON | `--json` の出力 / `--auto-output` の `<名前>.json` |
 | poselab CSV (ロング / ワイド) | `--csv` / `--wide-csv` の出力 |
 | MMPose 系 JSON (`meta_info` / `instance_info`) | Pose3DStudio など 3D パイプラインの `results_*.json` |
 | 汎用ワイド CSV (`名前_x/_y/_z` 列) | 他ツールの 3D 座標 CSV |
@@ -283,7 +471,7 @@ poselab-viewer --export-html viewer.html
 Space で再生/停止、←→ でコマ送り、F フィット、G グリッド、
 L ラベル、1/2/3 で正面/側面/上面。人物ごとの表示切替、注目関節の
 ハイライトと軌跡 (トレイル)、再生速度・FPS 変更、PNG 保存、
-腰位置センタリング・体格スケール正規化に対応しています。
+腰位置センタリング・体格スケール正規化・ライブ平滑化に対応しています。
 
 「エクスポート」パネルでは、読み込んだデータから**人物・関節
 (複数選択)・フレーム範囲を選んで個別にダウンロード**できます
@@ -341,6 +529,63 @@ Pose3DStudio など MMPose 系ツールの出力と互換で、`poselab-viewer` 
 ドロップするとそのまま 3D 再生できます (座標系は「Z 上向き」が自動
 選択されます)。3D 座標は MMPose の可視化規約 (z = 高さ、床基準) です。
 
+## PoseLab Studio (Web GUI)
+
+動画を放り込んでキュー処理する Pose3DStudio スタイルの Web GUI を、
+poselab 自身のパイプライン (mmpose 2D + 3D リフティング) で実行できます。
+旧 Pose3DStudio.exe は不要です。
+
+```bash
+poselab-studio          # GUI をブラウザで起動 (要 mmpose。GPU 自動検出)
+```
+
+上部タブで「実行」「ビューア」「結果・分析」の 3 ページに分かれています。
+
+- **実行**: ジョブキュー (複数動画・並べ替え・キャンセル)、ライブのログ /
+  進捗、システムチェック、モデルダウンロード
+- **ビューア**: 埋め込み 3D ビューア・プレビュー動画 (H.264)
+- **結果・分析**: 出力ファイル一覧・履歴に加え、関節角度・速度・左右対称性を
+  ブラウザ上で計算してグラフ + 要約統計を表示する対話型分析
+  ([分析方法](#分析方法) 参照)
+- 出力: MMPose 互換 results JSON + ワイド / ロング CSV + 2D/3D 可視化動画
+  (center_root / normalize_scale を CSV の world 座標へ適用可)
+
+### 配布版 (Windows、GPU 対応)
+
+**A. ローカルインストールスクリプト (推奨)** — `packaging/installer/`
+
+リポジトリを取得して `packaging\installer\Install-PoseLabStudio.cmd` を
+ダブルクリックするだけ。専用 venv に GPU (または CPU) 版 PyTorch・mmpose・
+poselab を入れ、スタートメニュー / デスクトップにショートカットを作ります。
+
+```powershell
+git pull origin main
+packaging\installer\Install-PoseLabStudio.cmd   # ダブルクリックでも可
+```
+
+- **Smart App Control に対応**: 未署名の .exe を実行せず、署名済みの
+  cmd / powershell / Python だけを使うためブロックされません
+- Python 3.11 が無ければ winget で導入を試みます。NVIDIA GPU を自動判定
+- **アンインストール**: `packaging\installer\Uninstall-PoseLabStudio.cmd` を
+  ダブルクリック (モデル重みも消すなら `-Cache` 付きで実行)
+
+**B. オンラインインストーラー (数十 MB)** — `build-installer.yml`
+
+小さな `PoseLabStudioSetup.exe` をダウンロードして実行。インストーラーが
+専用 Python・PyTorch・mmpose・poselab を自動で構築し、ショートカットを
+作ります。NVIDIA GPU を自動判定して CUDA 版 / CPU 版を取得します
+(**Smart App Control が有効な環境では未署名のためブロックされます** — その場合は A を)。
+
+**C. 同梱 zip (約2.85GB)** — `build-exe.yml`
+
+すべてを 1 つに固めた zip。オフライン環境向け。解凍して
+`PoseLabStudio.exe` を起動するだけ (これも未署名のため SAC 環境では
+ブロックされます)。`--selftest` で同梱物の自己診断、`--cli ...` は
+poselab CLI として動作します。
+
+いずれも GitHub Actions の Artifacts からダウンロードできます (バージョン
+タグを push するとインストーラーは GitHub Release に直リンクで添付されます)。
+
 ## シーンタグ付け (行動コーディング)
 
 GUI の「シーンタグ」タブで、再生中の映像にラベル付きの時間区間を
@@ -365,93 +610,38 @@ for frame in results:
 backend.close()
 ```
 
+分析関数も再利用できます (`poselab.analysis` / `poselab.kinematics`):
+
+```python
+from poselab.analysis import compute_person_angles, summarize_results
+from poselab.kinematics import symmetry_index, gait_summary
+
+angles = compute_person_angles(results[0].persons[0])   # 関節角度 (度)
+quality = summarize_results(results)                     # 検出率などの品質指標
+rhythm = gait_summary(results)                           # 歩行リズム (cadence)
+```
+
 バックエンドは `poselab.backends.base.PoseBackend` を継承することで
 他の推定エンジンにも差し替えられる設計です。
 
-## Pose3DStudio 後継 GUI (poselab-studio)
-
-動画を放り込んでキュー処理する Pose3DStudio スタイルの Web GUI を、
-poselab 自身のパイプライン (mmpose 2D + 3D リフティング) で実行できます。
-旧 Pose3DStudio.exe は不要です。
-
-```bash
-poselab-studio          # GUI をブラウザで起動 (要 mmpose。GPU 自動検出)
-```
-
-- ジョブキュー (複数動画・並べ替え・キャンセル)、ライブのログ / 進捗、
-  出力プレビュー (H.264 動画・results JSON のサマリ・埋め込み 3D ビューア)
-- 出力: MMPose 互換 results JSON + ワイド / ロング CSV + 2D/3D 可視化動画
-  (center_root / normalize_scale を CSV の world 座標へ適用可)
-
-### 配布版 (Windows、GPU 対応)
-
-**A. ローカルインストールスクリプト (推奨)** — `packaging/installer/`
-
-リポジトリを取得して `packaging\installer\Install-PoseLabStudio.cmd` を
-ダブルクリックするだけ。専用 venv に GPU(または CPU)版 PyTorch・mmpose・
-poselab を入れ、スタートメニュー / デスクトップにショートカットを作ります。
-
-```powershell
-git pull origin main
-packaging\installer\Install-PoseLabStudio.cmd   # ダブルクリックでも可
-```
-
-- **Smart App Control に対応**: 未署名の .exe を実行せず、署名済みの
-  cmd / powershell / Python だけを使うためブロックされません
-  (未署名インストーラー .exe は SAC が有効だとブロックされます)
-- Python 3.11 が無ければ winget で導入を試みます。NVIDIA GPU を自動判定
-- スタートメニュー / デスクトップのショートカットにはアプリアイコンが付きます
-- **アンインストール**: `packaging\installer\Uninstall-PoseLabStudio.cmd` を
-  ダブルクリック (インストール先一式とショートカットを削除)。ダウンロード済みの
-  モデル重みも消すなら `-Cache` を付けて実行
-  (`powershell -ExecutionPolicy Bypass -File packaging\installer\uninstall_local.ps1 -Cache`)
-
-**B. オンラインインストーラー (数十 MB)** — `build-installer.yml`
-
-小さな `PoseLabStudioSetup.exe` をダウンロードして実行。インストーラーが
-専用 Python・PyTorch・mmpose・poselab を自動で構築し、ショートカットを
-作ります。**Windows の Smart App Control が有効な環境では未署名のため
-ブロックされます**(その場合は A を使ってください)。
-
-- **NVIDIA GPU を自動判定**: 搭載機は CUDA 11.8 版、非搭載機は CPU 版
-  (約200MB) を取得するので、GPU が無い環境では取得量が大幅に減ります
-- 取得は PyTorch / PyPI の高速 CDN 経由でレジューム可。Python・pip の
-  事前インストールは不要 (モデルの重みのみ初回に自動ダウンロード)
-- スタートメニュー / デスクトップにショートカット、アンインストーラ付き
-
-**C. 同梱 zip (約2.85GB)** — `build-exe.yml`
-
-すべてを 1 つに固めた zip。オフライン環境向け。解凍して
-`PoseLabStudio.exe` を起動するだけ (これも未署名のため SAC 環境では
-ブロックされます)。
-
-- NVIDIA GPU (ドライバ 452 以降) があれば CUDA で、無ければ CPU で実行
-- `PoseLabStudio.exe --selftest` で同梱物の自己診断、
-  `PoseLabStudio.exe --cli ...` は poselab CLI として動作
-
-いずれも GitHub Actions の Artifacts からダウンロードできます (バージョン
-タグを push するとインストーラーは GitHub Release に直リンクで添付されます)。
-
-## 開発
+## 開発・テスト
 
 開発の全体像・引き継ぎ情報は [CLAUDE.md](CLAUDE.md) と
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) にまとまっています。
 
+```bash
+pip install -e ".[dev]"          # 開発用依存 (pytest, ruff, build 等)
+pytest tests/                    # テスト (mmpose 不要、フェイク注入式)
+ruff check poselab/ tests/       # lint (CI と同じ)
+```
+
+3D 描画エンジンはビューアと Studio GUI で共通の
+`poselab/webviewer/static/engine.js` です (`poselab-studio` がビルド時に連結)。
 GUI 一式のビルドと旧 exe への配備 (レガシー):
 
 ```bash
 poselab-studio build --out dist/studio-gui      # ビルドのみ
 poselab-studio deploy <exe>/_internal/gui       # 旧 exe へ配備 (画面で F5)
-```
-
-3D 描画エンジンはビューアと共通の `poselab/webviewer/static/engine.js`
-で、`poselab-studio` がビルド時に連結します。
-
-## テスト
-
-```bash
-pip install pytest
-pytest tests/
 ```
 
 ## ライセンスについて
@@ -467,9 +657,9 @@ pytest tests/
 
 - `z` (画像座標系の深度) は相対値であり、ワールド座標 (`world_*`) と
   スケールが異なります。3D 解析にはワールド座標の使用を推奨します
-- 推定値にはノイズが含まれるため、解析前に `visibility` でのフィルタや
-  平滑化を検討してください (`--smooth N` で NaN 対応の移動平均を適用
-  できます。より高度な平滑化が必要なら Savitzky–Golay フィルタ等を)
+- 推定値にはノイズが含まれるため、解析前に `visibility` でのフィルタ
+  (`--mask-visibility`) や平滑化 (`--smooth`) を検討してください。
+  加速度・ジャークなどの高次微分は特にノイズに敏感です
 - 複数人検出時 (`--num-poses` 2 以上) は人物 ID トラッキングが自動で
   有効になり、CSV / JSON / NPZ の `person` 列はフレーム間で安定した
   ID になります (映像上にも P0 / P1... のバッジを描画)。マッチングは
@@ -482,3 +672,7 @@ pytest tests/
   ID の連続性を確認してください
 - カメラのミラー表示 (`--camera-mirror`) 使用時は、キーポイントの
   left/right が被写体の実際の左右と逆になります
+- 各実行の設定・環境・入力ハッシュは run-manifest (JSON) に自動記録されます。
+  結果を共有・引用する際は manifest を添えると再現性を担保できます
+</content>
+</invoke>
