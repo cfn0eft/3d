@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.15 (2026-06-20)
+
+### ドキュメント
+- **README を全面的に再構成**。「インストール → 推定 → 分析 → 可視化」の
+  流れが一目で分かるよう、冒頭に **目次** と **クイックスタート** を追加し、
+  4 つの使い方 (CLI / GUI / 3D ビューア / Studio) を最初に俯瞰できるように
+  した (`README.md`)。
+- **「分析方法」セクションを新設し、これまで README に未記載だった分析機能を
+  網羅**: 左右対称性 `--symmetry-csv` (Symmetry Index)、速度 CSV の
+  加速度・ジャーク、関節角度 CSV の角速度、`--summary-json` の歩行リズム
+  (cadence)、平滑化手法 (`--smooth-method` moving/median/butter・
+  `--smooth-weighted`・`--smooth-cutoff`)、低信頼度マスク `--mask-visibility`、
+  実行来歴 `--run-manifest` / `--no-manifest`、`--prepare-models`、Studio の
+  対話型分析タブ。CLI オプション表を入力/出力/分析/表示の 4 つに整理。
+- `--auto-output` の実ファイル名 (`<名前>_long.csv` / `<名前>.json` 等) に
+  README の例を合わせ、Python API の例に `analysis` / `kinematics` の
+  分析関数を追記。
+
 ## 0.9.14 (2026-06-17)
 
 ### 追加
